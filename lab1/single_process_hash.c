@@ -7,6 +7,12 @@
 #include <iostream>
 #include <sys/time.h>
 
+/*
+ * Calculates hash for ITERATION number of times
+ * it approximately finishes in 5 seconds
+ * for 17000000 iterations
+ *
+ * */
 int main() {
   struct timeval begin, end;
 	char buf[4096];
