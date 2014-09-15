@@ -1,0 +1,12 @@
+\begin{Verbatim}[commandchars=\\\{\}, ]
+\PY{o}{[}    0.698814\PY{o}{]} pnp: PnP ACPI init
+\PY{o}{[}    0.699139\PY{o}{]} ACPI: bus \PY{n+nb}{type }PNP registered
+\PY{o}{[}    0.701140\PY{o}{]} pnp 00:00: Plug and Play ACPI device, IDs PNP0b00 \PY{o}{(}active\PY{o}{)}
+\PY{o}{[}    0.701586\PY{o}{]} pnp 00:01: Plug and Play ACPI device, IDs PNP0303 \PY{o}{(}active\PY{o}{)}
+\PY{o}{[}    0.701930\PY{o}{]} pnp 00:02: Plug and Play ACPI device, IDs PNP0f13 \PY{o}{(}active\PY{o}{)}
+\PY{o}{[}    0.702334\PY{o}{]} pnp 00:03: \PY{o}{[}dma 2\PY{o}{]}
+\PY{o}{[}    0.702549\PY{o}{]} pnp 00:03: Plug and Play ACPI device, IDs PNP0700 \PY{o}{(}active\PY{o}{)}
+\PY{o}{[}    0.703010\PY{o}{]} pnp 00:04: Plug and Play ACPI device, IDs PNP0400 \PY{o}{(}active\PY{o}{)}
+\PY{o}{[}    0.703427\PY{o}{]} pnp 00:05: Plug and Play ACPI device, IDs PNP0501 \PY{o}{(}active\PY{o}{)}
+\PY{o}{[}    0.705823\PY{o}{]} pnp: PnP ACPI: found 6 devices
+\end{Verbatim}

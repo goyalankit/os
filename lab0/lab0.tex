@@ -1,0 +1,201 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Short Sectioned Assignment
+% LaTeX Template
+% Version 1.0 (5/5/12)
+%
+% This template has been downloaded from:
+% http://www.LaTeXTemplates.com
+%
+% Original author:
+% Frits Wenneker (http://www.howtotex.com)
+%
+% License:
+% CC BY-NC-SA 3.0 (http://creativecommons.org/licenses/by-nc-sa/3.0/)
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+%----------------------------------------------------------------------------------------
+%	PACKAGES AND OTHER DOCUMENT CONFIGURATIONS
+%----------------------------------------------------------------------------------------
+
+\documentclass[paper=a4, fontsize=11pt]{scrartcl} % A4 paper and 11pt font size
+
+\usepackage[T1]{fontenc} % Use 8-bit encoding that has 256 glyphs
+\usepackage{fourier} % Use the Adobe Utopia font for the document - comment this line to return to the LaTeX default
+\usepackage[english]{babel} % English language/hyphenation
+\usepackage{amsmath,amsfonts,amsthm} % Math packages
+
+\usepackage{lipsum} % Used for inserting dummy 'Lorem ipsum' text into the template
+
+\usepackage{sectsty} % Allows customizing section commands
+%\allsectionsfont{\centering \normalfont\scshape} % Make all sections centered, the default font and small caps
+
+\usepackage{minted} % to insert code
+
+\usepackage{fancyhdr} % Custom headers and footers
+\pagestyle{fancyplain} % Makes all pages in the document conform to the custom headers and footers
+\fancyhead{} % No page header - if you want one, create it in the same way as the footers below
+\fancyfoot[L]{} % Empty left footer
+\fancyfoot[C]{} % Empty center footer
+\fancyfoot[R]{\thepage} % Page numbering for right footer
+\renewcommand{\headrulewidth}{0pt} % Remove header underlines
+\renewcommand{\footrulewidth}{0pt} % Remove footer underlines
+\setlength{\headheight}{13.6pt} % Customize the height of the header
+
+\numberwithin{equation}{section} % Number equations within sections (i.e. 1.1, 1.2, 2.1, 2.2 instead of 1, 2, 3, 4)
+\numberwithin{figure}{section} % Number figures within sections (i.e. 1.1, 1.2, 2.1, 2.2 instead of 1, 2, 3, 4)
+\numberwithin{table}{section} % Number tables within sections (i.e. 1.1, 1.2, 2.1, 2.2 instead of 1, 2, 3, 4)
+
+\setlength\parindent{0pt} % Removes all indentation from paragraphs - comment this line for an assignment with lots of text
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+
+\newcommand{\horrule}[1]{\rule{\linewidth}{#1}} % Create horizontal rule command with 1 argument of height
+
+\title{	
+\normalfont \normalsize 
+\textsc{The University of Texas at Austin} \\ [25pt] % Your university, school and/or department name(s)
+\horrule{0.5pt} \\[0.4cm] % Thin top horizontal rule
+\huge Lab \#0 \\ % The assignment title
+\horrule{2pt} \\[0.5cm] % Thick bottom horizontal rule
+}
+
+\author{Ankit Goyal} % Your name
+
+\date{\normalsize\today} % Today's date or a custom date
+
+\begin{document}
+
+\maketitle % Print the title
+
+%----------------------------------------------------------------------------------------
+%  Specs
+%----------------------------------------------------------------------------------------
+
+\section{Setup}
+\subsection{Hardware}
+\textbf{Guest Processor}: 64 bit 8 core Intel(R) Xeon(R) CPU E3-1270 V2 @ 3.50GHz\\
+\textbf{Guest Memory}: 16GB
+
+\textbf{VM} guests run with single 64-bit virtual CPU and 114.54MB of memory (obtained using /proc/meminfo)
+
+\subsection{Software}
+\textbf{Host Operating System}: Ubuntu with 3.13.0-34-generic 64 bit kernel.\\
+\textbf{Guest Operating System}: Ubuntu with 3.16.1 64 bit kernel.\\
+
+Qemu-kvm is used to run guest operating system. 
+
+%----------------------------------------------------------------------------------------
+%  Qemu Command Line
+%----------------------------------------------------------------------------------------
+
+\section{Qemu command}
+\begin{minted}{bash}
+qemu-system-x86_64 -drive file=tmpPKS3JS.qcow2 --snapshot \
+	-net nic,model=virtio -net user -redir tcp:2222::22 \
+	-kernel ~/workspace/kernel/kbuild/arch/x86_64/boot/bzImage \
+	-boot c -append "root=/dev/sda1 console=ttyS0,115200n8 console=ttyS0" -s  
+\end{minted}
+
+%----------------------------------------------------------------------------------------
+%  DMESG output
+%----------------------------------------------------------------------------------------
+
+\section{dmesg output}
+
+\textbf{A standard PC console screen being detected.}
+\begin{minted}{bash}
+[    0.000000] Console: colour VGA+ 80x25
+[    0.000000] console [ttyS0] enabled
+\end{minted}
+
+\textbf{Registering the USB interface.}
+\begin{minted}{bash}
+[    0.590510] ACPI: bus type USB registered
+[    0.591061] usbcore: registered new interface driver usbfs
+[    0.591538] usbcore: registered new interface driver hub
+[    0.592148] usbcore: registered new device driver usb
+\end{minted}
+
+\textbf{Detecting plug and play device interfaces}. I don't believe these are actual devices, since I don't have Wacom Penabled attached.\\ \\
+\begin{tabular}{ |c|c| } 
+ \hline
+PNP0b00 & CMOS/real time clock \\ 
+PNP0303 & Keyboard\\
+PNP0f13 & Alps Pointing-device \\ 
+PNP0700 & floppy disk controller.\\
+PNP0400 & printer\\
+PNP0501 & Wacom Penabled HID\\
+ \hline
+\end{tabular}
+
+\begin{minted}{bash}
+[    0.698814] pnp: PnP ACPI init
+[    0.699139] ACPI: bus type PNP registered
+[    0.701140] pnp 00:00: Plug and Play ACPI device, IDs PNP0b00 (active)
+[    0.701586] pnp 00:01: Plug and Play ACPI device, IDs PNP0303 (active)
+[    0.701930] pnp 00:02: Plug and Play ACPI device, IDs PNP0f13 (active)
+[    0.702334] pnp 00:03: [dma 2]
+[    0.702549] pnp 00:03: Plug and Play ACPI device, IDs PNP0700 (active)
+[    0.703010] pnp 00:04: Plug and Play ACPI device, IDs PNP0400 (active)
+[    0.703427] pnp 00:05: Plug and Play ACPI device, IDs PNP0501 (active)
+[    0.705823] pnp: PnP ACPI: found 6 devices
+\end{minted}
+
+\textbf{Keyboard and mouse actually getting detected}
+
+\begin{minted}{bash}
+[    0.904011] uhci_hcd: USB Universal Host Controller Interface driver
+[    0.905559] i8042: PNP: PS/2 Controller [PNP0303:KBD,PNP0f13:MOU] \
+                       at 0x60,0x64 irq 1,12
+\end{minted}
+
+\textbf{Detecting ATA devices}  - Discovered two ATA devices.
+\begin{minted}{bash}
+[    0.885403] ata1: PATA max MWDMA2 cmd 0x1f0 ctl 0x3f6 bmdma 0xc020 irq 14
+[    0.885740] ata2: PATA max MWDMA2 cmd 0x170 ctl 0x376 bmdma 0xc028 irq 15
+\end{minted}
+
+\textbf{ATA devices identified as DVD-ROM and HARDDISK}
+\begin{minted}{bash}
+[    1.050827] ata2.01: NODEV after polling detection
+[    1.053424] ata2.00: ATAPI: QEMU DVD-ROM, 2.0.0, max UDMA/100
+[    1.055532] ata1.01: NODEV after polling detection
+[    1.056661] ata1.00: ATA-7: QEMU HARDDISK, 2.0.0, max UDMA/100
+[    1.057076] ata1.00: 10485760 sectors, multi 16: LBA48
+[    1.058028] ata2.00: configured for MWDMA2
+[    1.058844] ata1.00: configured for MWDMA2
+\end{minted}
+
+\textbf{A SCSI interface to ATA devices is emulated.}
+\begin{minted}{bash}
+[    1.065295] scsi 0:0:0:0: Direct-Access  ATA  QEMU HARDDISK 0 PQ: 0 ANSI: 5
+[    1.075428] scsi 1:0:0:0: CD-ROM QEMU  QEMU DVD-ROM  2.0. PQ: 0 ANSI: 5
+[    1.087248] sr 1:0:0:0: Attached scsi CD-ROM sr0
+[    1.088424] sr 1:0:0:0: Attached scsi generic sg1 type 5
+[    1.095130] sd 0:0:0:0: [sda] Attached SCSI disk
+\end{minted}
+
+\textbf{Detecting RAID devices and no devices were found.}
+\begin{minted}{bash}
+[    1.098346] md: Autodetecting RAID arrays.
+[    1.098541] md: Scanned 0 and added 0 devices.
+\end{minted}
+
+
+
+
+
+\paragraph{Heading on level 4 (paragraph)}
+
+\lipsum[6] % Dummy text
+
+%----------------------------------------------------------------------------------------
+%	PROBLEM 2
+%----------------------------------------------------------------------------------------
+
+%----------------------------------------------------------------------------------------
+
+\end{document}

@@ -1,0 +1,10 @@
+[    0.698814] pnp: PnP ACPI init
+[    0.699139] ACPI: bus type PNP registered
+[    0.701140] pnp 00:00: Plug and Play ACPI device, IDs PNP0b00 (active)
+[    0.701586] pnp 00:01: Plug and Play ACPI device, IDs PNP0303 (active)
+[    0.701930] pnp 00:02: Plug and Play ACPI device, IDs PNP0f13 (active)
+[    0.702334] pnp 00:03: [dma 2]
+[    0.702549] pnp 00:03: Plug and Play ACPI device, IDs PNP0700 (active)
+[    0.703010] pnp 00:04: Plug and Play ACPI device, IDs PNP0400 (active)
+[    0.703427] pnp 00:05: Plug and Play ACPI device, IDs PNP0501 (active)
+[    0.705823] pnp: PnP ACPI: found 6 devices
