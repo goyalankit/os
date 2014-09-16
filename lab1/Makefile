@@ -1,5 +1,8 @@
 all: sph_out
 
+### Compile single process hash calculation files.
+single: sph_out
+
 sph_out: city.o single_process_hash.o
 	g++ city.o single_process_hash.o -o sph_out
 
