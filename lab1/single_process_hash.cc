@@ -1,31 +1,24 @@
 #include <stdio.h>
-#include <city.h>
+#include "city.h"
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
-#include "/usr/local/include/city.h"
 #include <iostream>
 #include <sys/time.h>
 
 /*
  * Calculates hash for ITERATION number of times
  * it approximately finishes in 5 seconds
- * for 17000000 iterations
+ * for 722000 iterations
  *
  * */
-int main(int argc, char *argv[]) {
-  size_t ITERATIONS = 17000;
 
-  /* hash parameters */
-	char buf[4096];
+double computeHash(size_t ITERATIONS) {
+ 	char buf[4096];
   uint128 hash_value;
 
   struct timeval begin, end;
   double elapsed;
-
-  if (argc > 1) {
-    ITERATIONS = atoi(argv[1]);
-  }
 
   printf("Running for %zd iterations\n", ITERATIONS);
   /* initialize buffer from urandom*/
@@ -39,7 +32,20 @@ int main(int argc, char *argv[]) {
   gettimeofday(&end, NULL);
 
   elapsed = (end.tv_sec - begin.tv_sec) + ((end.tv_usec - begin.tv_usec)/1000000.0);
+  return elapsed;
+}
 
+int main(int argc, char *argv[]) {
+  /* Default number of iterations */
+  size_t ITERATIONS = 17000;
+
+  /* Take number of iterations from User */
+  if (argc > 1) {
+    ITERATIONS = atoi(argv[1]);
+  }
+
+  double elapsed = computeHash(ITERATIONS);
   printf("Time Elapsed %f\n", elapsed);
+
 	return 0;
 }
