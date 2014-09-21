@@ -25,14 +25,21 @@
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); \
                         } while(0)
 
-// constants
+// numeric constants
 #define ITERATIONS 722000
+#define BILLION 1000000000
+
+// boolean constants
 #define CPU_AFFINITY false
 #define USE_CGROUPS false
 #define BE_FAIR false
-#define BILLION 1000000000
-#define TIME_TYPE CLOCK_REALTIME // CLOCK_MONOTONIC_RAW
-//#define TIME_TYPE CLOCK_PROCESS_CPUTIME_ID
+
+// time constants
+#ifdef CPU_TIME
+#define TIME_TYPE CLOCK_PROCESS_CPUTIME_ID
+#else
+#define TIME_TYPE CLOCK_REALTIME
+#endif
 
 // prevent compile from optimizing this variable
 volatile int waitForOthers = true;
@@ -99,21 +106,30 @@ static int childFunc(void *arg) {
 /* initialize buffer from urandom*/
 inline void initializeBuffer() {
   int fd = open("/dev/urandom", O_RDONLY);
+
+  if (fd < 0)
+    errExit("Error in opening /dev/urandom");
+
   read(fd, &buf, 4096);
   close(fd);
 }
-
+/**
+ * Attach hashing processes to cpus
+ *
+ *
+ */
 inline void setAffinity(int cpu_no, int pid) {
 #ifdef DEBUG
-  printf("[PARENT] setting process # %d to run on cpu # %d\n", pid, cpu_no);
+  printf("[PARENT] setting process # %d to run on cpu # %d\n", pid, cpu_no % 8);
 #endif
   cpu_set_t mask;
   CPU_ZERO(&mask);
-  CPU_SET(cpu_no, &mask);
+  CPU_SET(cpu_no % 8, &mask);
   int result = sched_setaffinity(pid, sizeof(mask), &mask);
 }
 /*
- *
+ * Create new cgroup for each process and assign twice the
+ * default share of cpu.
  *
  * */
 inline void setCgroups(int cpu_no, int pid) {
