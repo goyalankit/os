@@ -25,9 +25,14 @@
 #define errExit(msg) do { perror(msg); exit(EXIT_FAILURE); \
                         } while(0)
 
-#define ITERATIONS 910000 //722000
-#define CPU_AFFINITY true
+// constants
+#define ITERATIONS 722000
+#define CPU_AFFINITY false
+#define USE_CGROUPS false
+#define BE_FAIR false
 #define BILLION 1000000000
+#define TIME_TYPE CLOCK_REALTIME // CLOCK_MONOTONIC_RAW
+//#define TIME_TYPE CLOCK_PROCESS_CPUTIME_ID
 
 // prevent compile from optimizing this variable
 volatile int waitForOthers = true;
@@ -42,24 +47,30 @@ double computeHash() {
   uint128 hash_value;
 
   struct timespec start, stop;
-  double accum;
-
-  struct timeval begin, end;
   double elapsed;
 
 #ifdef DEBUG
   printf("[CHILD] Running for %zd iterations\n", (size_t)ITERATIONS);
 #endif
 
-  gettimeofday(&begin, NULL);
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start);
+  clock_gettime(TIME_TYPE, &start);
   for (int i = 0; i < ITERATIONS; i++) {
+
+#ifdef SCHED_INFO
+  if (i == 1000) {
+    struct timespec ts;
+    struct sched_param sp;
+    int ret;
+    ret = sched_rr_get_interval(getpid(), &ts);
+    ret = sched_getparam(getpid(), &sp);
+    printf("[CHILD::%d] Timeslice: %lu.%lu Priority: %d\n", getpid(), ts.tv_sec, ts.tv_nsec, sp.sched_priority);
+  }
+#endif
+
     hash_value = CityHash128(buf, 4096);
   }
-  clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &stop);
-  gettimeofday(&end, NULL);
+  clock_gettime(TIME_TYPE, &stop);
 
-  elapsed = (end.tv_sec - begin.tv_sec) + ((end.tv_usec - begin.tv_usec)/1000000.0);
   elapsed = (stop.tv_sec - start.tv_sec) + ((stop.tv_nsec - start.tv_nsec)/(double) BILLION);
   return elapsed;
 }
@@ -73,7 +84,7 @@ static int childFunc(void *arg) {
   /* wait for other processes to be created. */
   while(waitForOthers) {}
 
-  double *elapsed = (double *)arg;
+ double *elapsed = (double *)arg;
   /* call compute hash method here */
 *elapsed = computeHash();
 
@@ -87,8 +98,8 @@ static int childFunc(void *arg) {
 
 /* initialize buffer from urandom*/
 inline void initializeBuffer() {
-	int fd = open("/dev/urandom", O_RDONLY);
-	read(fd, &buf, 4096);
+  int fd = open("/dev/urandom", O_RDONLY);
+  read(fd, &buf, 4096);
   close(fd);
 }
 
@@ -101,13 +112,47 @@ inline void setAffinity(int cpu_no, int pid) {
   CPU_SET(cpu_no, &mask);
   int result = sched_setaffinity(pid, sizeof(mask), &mask);
 }
-
+/*
+ *
+ *
+ * */
 inline void setCgroups(int cpu_no, int pid) {
 #ifdef DEBUG
-  printf("[PARENT] setting cgroup for process number\n", pid, cpu_no);
+  printf("[PARENT] setting cgroup for process number\n");
 #endif
 
+  struct cgroup *cgroup;
+  struct cgroup_controller *cgc;
+  char *group_name = (char*)malloc(sizeof(pid) + sizeof("pid") + 32);
 
+  sprintf(group_name, "oslab%d", cpu_no);
+
+  cgroup = cgroup_new_cgroup(group_name);
+  cgc = cgroup_add_controller(cgroup, "cpu");
+#ifdef DEBUG
+  printf("[PARENT] Creating CGROUP:%s for process# %d \n", group_name, pid);
+#endif
+  sprintf(group_name, "%d", pid);
+  cgroup_add_value_string(cgc, "cpu.shares", "2048"); // the default value is 1024
+  cgroup_add_value_string(cgc, "tasks", group_name); // the default value is 1024
+
+  int ret = cgroup_create_cgroup(cgroup, 0);
+  if (ret != 0){
+    printf("[PARENT] Failed to create cgroup: %s\n", cgroup_strerror(ret));
+    errExit("");
+  }
+  return;
+}
+
+inline void makeFair(int cpu_no, int pid) {
+  struct sched_param param;
+  param.sched_priority = 99;
+
+  //printf("[PARENT] Maximum Priority: %d Minimum Priority: %d", sched_get_priority_max(SCHED_RR), sched_get_priority_min(SCHED_RR));
+  if (sched_setscheduler(pid, SCHED_RR, &param) != 0) {
+      perror("sched_setscheduler");
+      exit(EXIT_FAILURE);
+  }
 }
 
 int main(int argc, char *argv[]) {
@@ -115,7 +160,7 @@ int main(int argc, char *argv[]) {
   int numBgProc;
   pid_t pid;
 
-  struct timeval begin, end;
+  struct timespec begin, end;
   double total_time_taken;
 
   if (argc < 3) {
@@ -134,6 +179,14 @@ int main(int argc, char *argv[]) {
 #ifdef DEBUG
   printf("[PARENT] Initializing buffer..\n");
 #endif
+
+  if (USE_CGROUPS) {
+    int ret_st = cgroup_init();
+    if (ret_st != 0) {
+      errExit("[PARENT] Failed to initailize cgroup. Check permissions\n");
+    }
+  }
+
   initializeBuffer();
 
   for (int i = 0; i < numProc; ++i) {
@@ -160,6 +213,9 @@ int main(int argc, char *argv[]) {
 
     if (USE_CGROUPS)
       setCgroups(i, childPIDs[i]);
+
+    if (BE_FAIR)
+      makeFair(i, childPIDs[i]);
   }
 
 #ifdef DEBUG
@@ -167,7 +223,7 @@ int main(int argc, char *argv[]) {
 #endif
 
 
-  gettimeofday(&begin, NULL);
+  clock_gettime(TIME_TYPE, &begin);
   /* Create background processes*/
   start(numBgProc);
   /* start work in threads since all child processes have been created*/
@@ -190,8 +246,8 @@ int main(int argc, char *argv[]) {
   }
   /* Stop background processes */
   stop();
-  gettimeofday(&end, NULL);
-  total_time_taken = (end.tv_sec - begin.tv_sec) + ((end.tv_usec - begin.tv_usec)/1000000.0);
+  clock_gettime(TIME_TYPE, &end);
+  total_time_taken = (end.tv_sec - begin.tv_sec) + ((end.tv_nsec - begin.tv_nsec)/(double) BILLION);
 
   printf("Total time taken: %0.3f\n", total_time_taken);
 

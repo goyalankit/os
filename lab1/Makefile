@@ -4,10 +4,10 @@ all: clean sph_out multi
 multi: mph_out
 
 multi_process_hash.o:
-	g++ -c multi_process_hash.cpp -DDEBUG # remove -DDEBUG to disable debug information
+	g++ -c multi_process_hash.cpp -L/lib #-DDEBUG #-DSCHED_INFO #-DDEBUG # remove -DDEBUG to disable debug information
 
 mph_out: city.o multi_process_hash.o
-	g++ city.o backgroundTask.o multi_process_hash.o -o mph_out
+	g++ city.o backgroundTask.o multi_process_hash.o -o mph_out -lcgroup
 
 ### Compile single process hash calculation files.
 single: sph_out
