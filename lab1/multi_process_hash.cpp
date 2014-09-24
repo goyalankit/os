@@ -31,8 +31,8 @@
 
 // boolean constants
 #define CPU_AFFINITY false
-#define USE_CGROUPS false
-#define BE_FAIR true
+#define USE_CGROUPS true
+#define BE_FAIR false
 
 // time constants
 #ifdef CPU_TIME
