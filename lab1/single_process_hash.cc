@@ -37,7 +37,7 @@ double computeHash(size_t ITERATIONS) {
 
 int main(int argc, char *argv[]) {
   /* Default number of iterations */
-  size_t ITERATIONS = 17000;
+  size_t ITERATIONS = 722000;
 
   /* Take number of iterations from User */
   if (argc > 1) {

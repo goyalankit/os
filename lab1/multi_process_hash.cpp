@@ -31,7 +31,7 @@
 
 // boolean constants
 #define CPU_AFFINITY false
-#define USE_CGROUPS false
+#define USE_CGROUPS true
 #define BE_FAIR false
 
 // time constants
@@ -44,6 +44,12 @@
 // prevent compile from optimizing this variable
 volatile int waitForOthers = true;
 char buf[4096];
+int numProc;
+
+// this allows us to generate the yielding code only when we need.
+#if(BE_FAIR)
+#define ENABLE_SCHED
+#endif
 
 /* stack size since the processes will share memory, we should provide stack for each process. */
 #define STACK_SIZE (1024 * 1024)
@@ -63,15 +69,21 @@ double computeHash() {
   clock_gettime(TIME_TYPE, &start);
   for (int i = 0; i < ITERATIONS; i++) {
 
+#ifdef ENABLE_SCHED
+    if (BE_FAIR && i != 0 && i % (ITERATIONS/numProc) == 0){
+      sched_yield();
+    }
+#endif
+
 #ifdef SCHED_INFO
-  if (i == 1000) {
-    struct timespec ts;
-    struct sched_param sp;
-    int ret;
-    ret = sched_rr_get_interval(getpid(), &ts);
-    ret = sched_getparam(getpid(), &sp);
-    printf("[CHILD::%d] Timeslice: %lu.%lu Priority: %d\n", getpid(), ts.tv_sec, ts.tv_nsec, sp.sched_priority);
-  }
+    if (i == 1000) {
+      struct timespec ts;
+      struct sched_param sp;
+      int ret;
+      ret = sched_rr_get_interval(getpid(), &ts);
+      ret = sched_getparam(getpid(), &sp);
+      printf("[CHILD::%d] Timeslice: %lu.%lu Priority: %d\n", getpid(), ts.tv_sec, ts.tv_nsec, sp.sched_priority);
+    }
 #endif
 
     hash_value = CityHash128(buf, 4096);
@@ -91,9 +103,9 @@ static int childFunc(void *arg) {
   /* wait for other processes to be created. */
   while(waitForOthers) {}
 
- double *elapsed = (double *)arg;
+  double *elapsed = (double *)arg;
   /* call compute hash method here */
-*elapsed = computeHash();
+  *elapsed = computeHash();
 
 #ifdef DEBUG
   printf("[CHILD] ELAPSED TIME: %f\n", *elapsed);
@@ -164,15 +176,18 @@ inline void makeFair(int cpu_no, int pid) {
   struct sched_param param;
   param.sched_priority = 99;
 
-  //printf("[PARENT] Maximum Priority: %d Minimum Priority: %d", sched_get_priority_max(SCHED_RR), sched_get_priority_min(SCHED_RR));
+#ifdef SCHED_INFO
+  printf("[PARENT] Maximum Priority: %d Minimum Priority: %d", sched_get_priority_max(SCHED_OTHER), sched_get_priority_min(SCHED_OTHER));
+  printf("[PARENT] Scheduling policy: %d", sched_getscheduler(pid));
+#endif
+
   if (sched_setscheduler(pid, SCHED_RR, &param) != 0) {
-      perror("sched_setscheduler");
-      exit(EXIT_FAILURE);
+    perror("sched_setscheduler");
+    exit(EXIT_FAILURE);
   }
 }
 
 int main(int argc, char *argv[]) {
-  int numProc;
   int numBgProc;
   pid_t pid;
 
@@ -206,7 +221,7 @@ int main(int argc, char *argv[]) {
   initializeBuffer();
 
   for (int i = 0; i < numProc; ++i) {
-   char *stack; // pointer variable on stack
+    char *stack; // pointer variable on stack
 
     /* Allocate memory to stack */
     stack = (char *)malloc(STACK_SIZE); // HEAP
@@ -271,7 +286,8 @@ int main(int argc, char *argv[]) {
   delete(allocatedStacks);
 
   for (int i = 0; i < numProc; ++i) { //    printf("%p\n", allocatedStacks[i]);
-    printf("%d\t%0.3f\n", i, elapsed[i]);
+    //    printf("%d\t%0.3f\n", i, elapsed[i]);
+    printf("%0.3f\n", elapsed[i]);
   }
 
   return EXIT_SUCCESS;
