@@ -217,7 +217,8 @@ inline void makeFair(int pid) {
 \end{listing}
 
 \section{Fairness}
-The default scheduler in linux - CFS (Completely Fair Scheduler) does quite a good job in scheduling fairly most of the times. However it's not always fair, in some cases the deviation from mean was a bit higher than normal. \\
+The default scheduler in linux - CFS (Completely Fair Scheduler) does quite a good job in scheduling fairly most of the times. However it's not always fair, in some cases the deviation from mean was a bit higher than normal as can be seen in Figure \ref{fig:thvsfair1}. \\
+
 
 \noindent One way to ensure fairness is by using Round Robin Scheduling (\texttt{SCHED\_RR}) with high priority and yielding each process after a fix number of iterations. This ensures fairness among the hashing processes in all cases. However this doesn't provide fairness among other processes (for e.g., background processes) and \emph{only root can do that.} \\
 
@@ -245,21 +246,20 @@ The default scheduler in linux - CFS (Completely Fair Scheduler) does quite a go
 
 \noindent Table \ref{table:schedpolicy} shows the total time taken by each process under Round Robin scheduling (\texttt{SCHED\_RR}). \textbf{The maximum deviation from mean in this case is 0.03 compared to 0.96 with normal scheduling (\texttt{SCHED\_OTHER})}. \\
 
-\noindent Moreover, Figure \ref{fig:thvsfair2} shows that both the throughput and Fairness are highly consistent since we have hashing processes at much higher priority than background processes. It's interesting to see that throughput is better than normal scheduling and time is fairly distributed. This is true, since our hashing processing are running at higher priority, time given to background processes is almost negligible. \\
+\noindent Moreover, Figure \ref{fig:thvsfair2} shows that both the throughput and Fairness are highly consistent since we have hashing processes at much higher priority than background processes. It's interesting to see that throughput is better than normal scheduling and time is fairly distributed. This is true, since our hashing processing are running at higher priority than  background processes. \\
 
-\noindent \textbf{Minor Implementation Comment}: The branch in \texttt{computeHash}, even though will most likely be optimized by compiler in case \texttt{BE\_FAIR} is false, is still put under pre-processor so that it doesn't get generated if \texttt{BE\_FAIR} is false. This is done to keep the work constant as the compiler may do better branch prediction (Just in case) in one of the processes than other.
+\noindent \textbf{Minor Implementation Comment}: The branch in \texttt{computeHash}, even though will most likely be optimized by compiler in case \texttt{BE\_FAIR} is false, is still put under pre-processor so that it doesn't get generated if \texttt{BE\_FAIR} is false. This is done to keep the work constant as the compiler may or may not optimize or branch predict.
 
 \section{Cryptographic vs Non-Cryptographic Hash}
-A cryptographic hash function provides security guarantees that the non-cryptographic hash functions may or may not provide. Most importantly, in cryptographic hash functions, it should be hard to find collisions or pre-images. \textbf{Hard} usually means it takes very long time or is practically impossible to find collisions or pre-images. Due to these guarantees, cryptographic functions are usually slower than non-cryptographic functions. Non-cryptographic functions are usually used for CRC and 
+A cryptographic hash function provides security guarantees that the non-cryptographic hash functions may or may not provide. Most importantly, in cryptographic hash functions, it should be hard to find collisions or pre-images. \textbf{Hard} usually means it takes very long time or is practically impossible to find collisions or pre-images as the length increases. Due to these guarantees, cryptographic functions are usually slower than non-cryptographic functions. Example usage of non-cryptographic functions are CRC checks and cryptographic are for storing passwords.\\
 
 
-
-\noindent \textbf{Time Spent on the lab \ensuremath{\approx}14 hours} 
+\noindent \textbf{Time Spent on the lab \ensuremath{\approx}16 hours} 
 
 \section{References:}
 1. \url{http://www.linuxjournal.com/article/6799}  \\
-2. \url{http://security.stackexchange.com/questions/11839/what-is-the-difference-between-a-hash-function-and-a-cryptographic-hash-function} \\
-3. \url{http://linux.die.net/man/4/rtc} \\
-4. \url{http://linux.die.net/man/4/urandom}
+2. \url{http://security.stackexchange.com/questions/11839} \\
+3. \url{http://linux.die.net/man/2/clone} \\
+4. \url{https://www.kernel.org/doc/Documentation/scheduler/sched-design-CFS.txt}
 
 \end{document}
