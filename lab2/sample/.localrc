@@ -1,0 +1,2 @@
+alias fu='fusermount -u /tmp/fuse'
+alias nm='./netfs /tmp/fuse'
