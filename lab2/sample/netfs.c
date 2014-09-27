@@ -16,19 +16,15 @@ Modified by: Ankit Goyal
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdarg.h>
-#include <libssh/libssh.h>
 
 #include "state.h"
-#include "ssh_connect.h"
+#include "log.h"
 
 static const char *hello_str = "Hello World!\n";
 static const char *netfs_path = "/netfs";
 
-ssh_session the_ssh_session;
-
 static int netfs_getattr(const char *path, struct stat *stbuf)
 {
-  fprintf(stderr, "[NETFS] getattr called with path = %s\n", path);
   int res = 0;
   memset(stbuf, 0, sizeof(struct stat));
   if (strcmp(path, "/") == 0) {
@@ -46,7 +42,6 @@ static int netfs_getattr(const char *path, struct stat *stbuf)
 static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
-  fprintf(stderr, "[NETFS] readdir called with path = %s\n", path);
   (void) offset;
   (void) fi;
   if (strcmp(path, "/") != 0)
@@ -59,7 +54,6 @@ static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 static int netfs_open(const char *path, struct fuse_file_info *fi)
 {
-  fprintf(stderr, "[NETFS] open called with path = %s\n", path);
   if (strcmp(path, netfs_path) != 0)
     return -ENOENT;
   if ((fi->flags & 3) != O_RDONLY)
@@ -70,7 +64,6 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
 static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
-  fprintf(stderr, "[NETFS] read called with path = %s\n", path);
   size_t len;
   (void) fi;
   if(strcmp(path, netfs_path) != 0)
@@ -92,45 +85,18 @@ static struct fuse_operations netfs_oper = {
   .read = netfs_read,
 };
 
-
-/*
- * Main method to start the FUSE deamon.
- * Usage: ./netfs mountdir username hostname
- *
- * */
 int main(int argc, char *argv[])
 {
 
-  // sanity check
-  if (argc < 3) {
-    printf("Usage %s <mountdir> <username> <hostname>\n", argv[0]);
-    exit(EXIT_SUCCESS); /* bye */
-  }
-
-  int fuse_main_ret;
-
-  char *username = argv[argc-2]; // second last parameter is username
-  char *hostname = argv[argc-1]; // last parameter is hostname
-
-  the_ssh_session = create_ssh_connection(username, hostname);
-
-
   struct netfs_state *netfs_state;
   netfs_state = malloc(sizeof(struct netfs_state));
-
+  netfs_state->logfile = log_open();
 
   if (netfs_state == NULL) {
     perror("malloc");
     abort();
   }
 
-  show_remote_processes(the_ssh_session);
-  fprintf(stderr, "Successfuly");
-
-  fuse_main_ret = fuse_main(argc-2, argv, &netfs_oper, netfs_state);
-
-  disconnect_ssh(the_ssh_session);
-
-  return fuse_main_ret;
+  return fuse_main(argc, argv, &netfs_oper, netfs_state);
 }
 
