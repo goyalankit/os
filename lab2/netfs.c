@@ -17,16 +17,71 @@ Modified by: Ankit Goyal
 #include <unistd.h>
 #include <stdarg.h>
 #include <libssh/libssh.h>
+#include <libssh/sftp.h>
 
 #include "state.h"
 #include "ssh_connect.h"
+#include "sftp_connect.h"
 
 static const char *hello_str = "Hello World!\n";
 static const char *netfs_path = "/netfs";
 
-ssh_session the_ssh_session;
+ssh_session session;
+sftp_session sftp;
 
-static int netfs_getattr(const char *path, struct stat *stbuf)
+static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
+    off_t offset, struct fuse_file_info *fi)
+{
+  fprintf(stderr, "[NETFS] getattr called. going to call remote sftp\n");
+  sftp_dir dir;
+  sftp_attributes attributes;
+  int rc;
+  (void) offset;
+  (void) fi;
+  dir = sftp_opendir(sftp, "/u/ankit/shared");
+  if (!dir)
+  {
+    fprintf(stderr, "Directory not opened: %s\n",
+        ssh_get_error(session));
+    return SSH_ERROR;
+  }
+//  printf("Name Size Perms Owner\tGroup\n");
+    filler(buf,  ".", NULL, 0);
+    filler(buf,  "..", NULL, 0);
+
+  while ((attributes = sftp_readdir(sftp, dir)) != NULL)
+  { filler(buf, attributes->name, NULL, 0); }/*
+    printf("%-20s %10llu %.8o %s(%d)\t%s(%d)\n",
+        attributes->name,
+        (long long unsigned int) attributes->size,
+        attributes->permissions,
+        attributes->owner,
+        attributes->uid,
+        attributes->group,
+        attributes->gid);
+    sftp_attributes_free(attributes);
+    filler(buf,  attributes->name, NULL, 0);
+  }*/
+
+  if (!sftp_dir_eof(dir))
+  {
+  fprintf(stderr, "Can't list directory: %s\n",
+      ssh_get_error(session));
+  sftp_closedir(dir);
+  abort();
+  }
+  rc = sftp_closedir(dir);
+  if (rc != SSH_OK)
+  {
+  fprintf(stderr, "Can't close directory: %s\n",
+      ssh_get_error(session));
+      abort();
+  }
+  return EXIT_SUCCESS;
+}
+
+
+  static int netfs_getattr(const char *path, struct stat *stbuf)
 {
   fprintf(stderr, "[NETFS] getattr called with path = %s\n", path);
   int res = 0;
@@ -42,7 +97,7 @@ static int netfs_getattr(const char *path, struct stat *stbuf)
     res = -ENOENT;
   return res;
 }
-
+/*
 static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
@@ -56,7 +111,7 @@ static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   filler(buf, netfs_path + 1, NULL, 0);
   return 0;
 }
-
+*/
 static int netfs_open(const char *path, struct fuse_file_info *fi)
 {
   fprintf(stderr, "[NETFS] open called with path = %s\n", path);
@@ -112,24 +167,25 @@ int main(int argc, char *argv[])
   char *username = argv[argc-2]; // second last parameter is username
   char *hostname = argv[argc-1]; // last parameter is hostname
 
-  the_ssh_session = create_ssh_connection(username, hostname);
+  session = create_ssh_connection(username, hostname);
+  sftp = create_sftp_connection(session);
 
 
   struct netfs_state *netfs_state;
   netfs_state = malloc(sizeof(struct netfs_state));
-
 
   if (netfs_state == NULL) {
     perror("malloc");
     abort();
   }
 
-  show_remote_processes(the_ssh_session);
-  fprintf(stderr, "Successfuly");
+//  show_remote_processes(session);
 
   fuse_main_ret = fuse_main(argc-2, argv, &netfs_oper, netfs_state);
 
-  disconnect_ssh(the_ssh_session);
+  fprintf(stderr, "Successfuly");
+  disconnect_sftp(sftp);
+  disconnect_ssh(session);
 
   return fuse_main_ret;
 }
