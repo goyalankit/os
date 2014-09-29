@@ -49,6 +49,23 @@ static void netfs_fullpath(char fpath[PATH_MAX], const char *path)
 }
 
 
+/*
+ * Create an equivalent structure in /tmp directory for caching.
+ * Since different files may exists in different directories with
+ * same name. we don't want path conflicts.
+ *
+ * */
+static void netfs_temppath(char fpath[PATH_MAX], const char *path)
+{
+  strcpy(fpath, "/tmp");
+  strncat(fpath, path, PATH_MAX);
+}
+
+/*
+ * This method is called when you ls into directory. We are filling the information
+ * here. This will be called for all the directories on ls.
+ *
+ * */
 static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     off_t offset, struct fuse_file_info *fi)
 {
@@ -97,7 +114,10 @@ static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
   return EXIT_SUCCESS;
 }
 
-
+/*
+ * Called for both files and directory when you do ls -l or ls
+ *
+ * */
 static int netfs_getattr(const char *path, struct stat *stbuf)
 {
 #ifdef DEBUG
@@ -120,7 +140,7 @@ static int netfs_getattr(const char *path, struct stat *stbuf)
 
   // name and group name are only set if openssh is used.
   // fprintf(stderr, "owner name %s: group name %s", attributes->owner, attributes->group);
-  stbuf -> st_mode = attributes->permissions;
+  stbuf->st_mode = attributes->permissions;
   stbuf->st_uid = attributes->uid;
   stbuf->st_gid = attributes->gid;
   stbuf->st_size = attributes->size;
@@ -133,12 +153,22 @@ static int netfs_getattr(const char *path, struct stat *stbuf)
 
 }
 
+sftp_attributes netfs_filesize(sftp_file file) {
+  sftp_attributes attributes;
+
+  if ((attributes = sftp_fstat(file)) == NULL) {
+    fprintf(stderr, "Unable to stat file/directory: %s\n", ssh_get_error(session));
+    return -1;
+  }
+  return attributes;
+}
+
+
 /*
  * fi->flags: open flags
  *
  *
  * */
-
 static int netfs_open(const char *path, struct fuse_file_info *fi)
 {
   fprintf(stderr, "[NETFS:open] open called with path = %s\n", path);
@@ -148,10 +178,40 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
 
   sftp_file file;
   file = sftp_open(sftp, fpath, fi->flags, 0);
+
+
   if (file == NULL) {
     fprintf(stderr, "no podia abrir la ficha. %s\n", ssh_get_error(session));
     return -1;
   }
+
+  char tpath[PATH_MAX];
+  netfs_temppath(tpath, path);
+
+
+  char buf[4096];
+  fprintf(stderr, "Writting to file at %s\n", tpath);
+  sftp_attributes attributes = netfs_filesize(file);
+  size_t file_size = attributes->size;
+  if (file_size > 4095) {
+    file_size = 4095;
+  }
+  int fd = open(tpath,  O_WRONLY | O_CREAT | O_TRUNC, attributes->permissions);
+
+  if (fd == -1) {
+    fprintf(stderr, "I couldn't open /tmp/%s for writing.\n", tpath);
+    return -1;
+  }
+  fprintf(stderr, "SIZE OF FILE ____  %d\n", file_size);
+  while(sftp_read(file, buf, file_size) != 0) {
+    if (write(fd, buf, file_size) == -1) {
+      fprintf(stderr, "Unable to write %s file.\n", tpath);
+      return -1;
+    }
+  }
+
+  close(fd);
+  sftp_close(file);
   //fprintf("File opened. %d   %d", fi->fh, file->fh);
   return 0;
 }
@@ -163,9 +223,17 @@ static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
   size_t len;
   (void) fi;
 
-  //sftp_read (file, void *buf, size_t count)
+  char tpath[PATH_MAX];
+  netfs_temppath(tpath, path);
 
-  if(strcmp(path, netfs_path) != 0)
+  int fd = open(tpath, S_IREAD);
+
+  if (read(fd, buf, size) < 0) {
+    fprintf(stderr, "I couldn't read from %s.\n", tpath);
+    return -1;
+  }
+
+ /* if(strcmp(path, netfs_path) != 0)
     return -ENOENT;
   len = strlen(hello_str);
   if (offset < len) {
@@ -174,7 +242,8 @@ static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
     memcpy(buf, hello_str + offset, size);
   } else
     size = 0;
-  return size;
+    */
+  return size; // size
 }
 
 static struct fuse_operations netfs_oper = {
