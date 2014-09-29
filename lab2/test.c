@@ -7,8 +7,8 @@
 
 int
 main() {
-   int fd0 = open("foo", O_RDWR);
-   int fd1 = open("foo", O_RDONLY);
+   int fd0 = open("mdir/file1.txt", O_RDWR);
+   int fd1 = open("mdir/file1.txt", O_RDONLY);
    char buf[100];
    buf[0] = 9;
    buf[1] = 81;

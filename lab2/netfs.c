@@ -31,8 +31,6 @@ http://api.libssh.org/master/libssh_tutor_guided_tour.html
 #include "ssh_connect.h"
 #include "sftp_connect.h"
 
-static const char *hello_str = "Hello World!\n";
-static const char *netfs_path = "/netfs";
 static const char *rootdir =  "/u/ankit/shared";
 
 ssh_session session;
@@ -177,7 +175,7 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
   netfs_fullpath(fpath, path);
 
   sftp_file file;
-  file = sftp_open(sftp, fpath, fi->flags, 0);
+  file = sftp_open(sftp, fpath, O_RDONLY, 0);
 
 
   if (file == NULL) {
@@ -189,21 +187,22 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
   netfs_temppath(tpath, path);
 
 
-  char buf[4096];
   fprintf(stderr, "Writting to file at %s\n", tpath);
   sftp_attributes attributes = netfs_filesize(file);
   size_t file_size = attributes->size;
   if (file_size > 4095) {
     file_size = 4095;
   }
-  int fd = open(tpath,  O_WRONLY | O_CREAT | O_TRUNC, attributes->permissions);
 
+  char *buf = malloc(file_size);
+  int fd = open(tpath,  O_WRONLY | O_CREAT | O_TRUNC, attributes->permissions);
   if (fd == -1) {
     fprintf(stderr, "I couldn't open /tmp/%s for writing.\n", tpath);
     return -1;
   }
+
   fprintf(stderr, "SIZE OF FILE ____  %d\n", file_size);
-  while(sftp_read(file, buf, file_size) != 0) {
+  if(sftp_read(file, buf, file_size) == file_size) {
     if (write(fd, buf, file_size) == -1) {
       fprintf(stderr, "Unable to write %s file.\n", tpath);
       return -1;
@@ -226,31 +225,57 @@ static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
   char tpath[PATH_MAX];
   netfs_temppath(tpath, path);
 
-  int fd = open(tpath, S_IREAD);
+  int fd = open(tpath, S_IREAD); // READ from the temp file.
+  if (fd == -1) {
+    fprintf(stderr, "I couldn't open /tmp/%s for writing.\n", tpath);
+    return -1;
+  }
 
   if (read(fd, buf, size) < 0) {
     fprintf(stderr, "I couldn't read from %s.\n", tpath);
     return -1;
   }
 
- /* if(strcmp(path, netfs_path) != 0)
-    return -ENOENT;
-  len = strlen(hello_str);
-  if (offset < len) {
-    if (offset + size > len)
-      size = len - offset;
-    memcpy(buf, hello_str + offset, size);
-  } else
-    size = 0;
-    */
-  return size; // size
+  return size;
 }
+
+int netfs_write(const char *path, const char *buf, size_t size, off_t offset,
+         struct fuse_file_info *file)
+{
+
+  fprintf(stderr, "WRITE CALLED DUDE!");
+  char tpath[PATH_MAX];
+  netfs_temppath(tpath, path);
+
+
+  fprintf("Write called with flags %d", O_WRONLY);
+  int fd = open(tpath, O_WRONLY); // READ from the temp file.
+  if (fd == -1) {
+    fprintf(stderr, "I couldn't open /tmp/%s for writing.\n", tpath);
+    return -1;
+  }
+
+  int nbytes;
+  fprintf(stderr, "Asked to print this %s, with size %d\n", buf, size);
+  int res = pwrite(fd, buf, size, offset);
+
+  /*if ((nbytes = write(fd, buf, size)) == -1) {
+    fprintf(stderr, "Unable to write %s file.\n", tpath);
+    return -1;
+  }*/
+
+//  close(fd);
+
+  return size;
+}
+
 
 static struct fuse_operations netfs_oper = {
   .getattr = netfs_getattr,
   .readdir = netfs_readdir,
   .open = netfs_open,
   .read = netfs_read,
+  .write = netfs_write,
 };
 
 
