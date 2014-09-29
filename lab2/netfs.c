@@ -31,7 +31,7 @@ http://api.libssh.org/master/libssh_tutor_guided_tour.html
 #include "ssh_connect.h"
 #include "sftp_connect.h"
 
-static const char *rootdir =  "/u/ankit/shared";
+static const char *rootdir =  "/home/ubuntu/shared";
 
 ssh_session session;
 sftp_session sftp;
@@ -239,7 +239,7 @@ static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
   return size;
 }
 
-int netfs_write(const char *path, const char *buf, size_t size, off_t offset,
+static int netfs_write(const char *path, const char *buf, size_t size, off_t offset,
          struct fuse_file_info *file)
 {
 
@@ -264,9 +264,55 @@ int netfs_write(const char *path, const char *buf, size_t size, off_t offset,
     return -1;
   }*/
 
-//  close(fd);
+  close(fd);
 
   return size;
+}
+
+static int netfs_flush(const char* path, struct fuse_file_info *fi) {
+  char tpath[PATH_MAX];
+  netfs_temppath(tpath, path);
+
+  int nbytes;
+  int fd = open(tpath, O_RDONLY); // READ from the temp file.
+  if (fd == -1) {
+    fprintf(stderr, "Unable to open temp file locally");
+    return -1;
+  }
+  struct stat *st = malloc(sizeof(struct stat));
+  if (stat(tpath, st) == -1) {
+    fprintf(stderr, "Unable to fstat temp file locally");
+    return -1;
+  }
+
+  char *buf = malloc(st->st_size);
+
+  if ((nbytes = read(fd, buf, st->st_size)) == -1) {
+    fprintf(stderr, "I couldn't open %s for reading.\n", tpath);
+    return -1;
+  }
+
+  fprintf(stderr, "[DEBUG] READ FROM LOCALFILE\n");
+  char fpath[PATH_MAX];
+  netfs_fullpath(fpath, path);
+  sftp_file remotefile = sftp_open(sftp, fpath, O_RDWR | O_CREAT | O_TRUNC, 0);
+  if (remotefile == NULL) {
+    fprintf(stderr, "I couldn't open remote %s for writing.\n", fpath);
+    return -1;
+  }
+  close(fd);
+
+  fprintf(stderr, "[DEBUG] OPENED THE REMOTE FILE\n");
+
+  if ((nbytes = sftp_write(remotefile, buf, st->st_size)) == -1) {
+    fprintf(stderr, "I couldn't write to remote file  %s .\n", fpath);
+    return -1;
+  }
+
+  fprintf(stderr, "[DEBUG] WRITTEN TO REMOTE FILE %s\n", fpath);
+  //sftp_close(remotefile);
+
+  return 0;
 }
 
 
@@ -276,6 +322,7 @@ static struct fuse_operations netfs_oper = {
   .open = netfs_open,
   .read = netfs_read,
   .write = netfs_write,
+  .flush = netfs_flush,
 };
 
 
