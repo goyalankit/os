@@ -171,30 +171,30 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
   char fpath[PATH_MAX];
   netfs_fullpath(fpath, path);
 
-  sftp_file file;
-  file = sftp_open(sftp, fpath, O_RDONLY, 0);
+  char tpath[PATH_MAX];
+  netfs_temppath(tpath, path);
 
-
+  /* open the remote file */
+  sftp_file file = sftp_open(sftp, fpath, O_RDONLY, 0);
   if (file == NULL) {
     fprintf(stderr, "no podia abrir la ficha. %s\n", ssh_get_error(session));
     return -1;
   }
 
-  char tpath[PATH_MAX];
-  netfs_temppath(tpath, path);
-
+  /* open the local file */
   sftp_attributes attributes = netfs_filesize(file);
-  size_t file_size = attributes->size;
-
-  char *buf = malloc(file_size);
   int fd = open(tpath,  O_WRONLY | O_CREAT | O_TRUNC, attributes->permissions);
   if (fd == -1) {
     fprintf(stderr, "I couldn't open /tmp/%s for writing.\n", tpath);
     return -1;
   }
-  int nbytes, nwritten;
+
   char buffer[16384];
+  int nbytes, nwritten;
+
+  /* read from remote and write to local */
   for (;;) {
+    /* read */
     nbytes = sftp_read(file, buffer, sizeof(buffer));
     if (nbytes == 0) {
       break; // EOF
@@ -204,7 +204,8 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
       sftp_close(file);
       return -1;
     }
-    nwritten = write(fd, buf, nbytes);
+    /* write */
+    nwritten = write(fd, buffer, nbytes);
     if (nwritten != nbytes) {
       fprintf(stderr, "Error writing: %s\n",
           strerror(errno));
@@ -213,18 +214,7 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     }
   }
 
-  /* if((bytes_read = sftp_read(file, buf, file_size)) == file_size) {
-     if (pwrite(fd, buf, file_size, 0) != file_size) {
-     fprintf(stderr, "Unable to write %s file.\n", tpath);
-     return -1;
-     }
-     } else {
-     fprintf(stderr, "couldn't read the file. %s %d\n", ssh_get_error(session), bytes_read);
-     return -1;
-     }
-     */
   fi->fh = fd; // store it to metadata.
-  //close(fd);
   sftp_close(file);
   return 0;
 }
@@ -279,7 +269,6 @@ static int netfs_write(const char *path, const char *buf, size_t size, off_t off
   }
 
   int nbytes;
-  fprintf(stderr, "Asked to print this %s, with size %d\n", buf, size);
   int res = pwrite(fd, buf, size, offset);
 
   if (res == -1) {
@@ -291,15 +280,13 @@ static int netfs_write(const char *path, const char *buf, size_t size, off_t off
 }
 
 static int netfs_flush(const char* path, struct fuse_file_info *fi) {
-  char tpath[PATH_MAX];
-  netfs_temppath(tpath, path);
-
+  char tpath[PATH_MAX], fpath[PATH_MAX], buf[16384];
   int nbytes;
   int fd = fi->fh;
-  close(fd); // flush and save the data
 
-  char fpath[PATH_MAX];
+  netfs_temppath(tpath, path);
   netfs_fullpath(fpath, path);
+  close(fd); // flush and save the data
 
   sftp_file remotefile = sftp_open(sftp, fpath, O_RDWR | O_CREAT | O_TRUNC, 0);
   fd = open(tpath, O_RDONLY); // READ from the temp file.
@@ -318,8 +305,6 @@ static int netfs_flush(const char* path, struct fuse_file_info *fi) {
     fprintf(stderr, "I couldn't open remote %s for writing.\n", fpath);
     return -1;
   }
-
-  char buf[16384];
 
   for(;;){
     nbytes = read(fd, buf, sizeof(buf));
