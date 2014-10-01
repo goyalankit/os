@@ -16,6 +16,9 @@ netfs: netfs.o ssh_connect.o sftp_connect.o
 	gcc -Wall netfs.o ssh_connect.o sftp_connect.o `pkg-config fuse --cflags --libs` -o netfs -lssh
 	rm netfs.o ssh_connect.o sftp_connect.o
 
+test:
+	gcc test_write.c -o tw
+
 clean:
 	rm -rf log.o netfs.o netfs
 

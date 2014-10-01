@@ -34,6 +34,7 @@ http://api.libssh.org/master/libssh_tutor_guided_tour.html
 static const char *rootdir =  "/home/ubuntu/shared";
 ssh_session session;
 sftp_session sftp;
+//#define FUSE_CAP_BIG_WRITES (1<<5)
 
 /*
  * Get the full path of given resource
@@ -88,9 +89,6 @@ static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return -1;
   }
 
-  filler(buf,  ".", NULL, 0);
-  filler(buf,  "..", NULL, 0);
-
   while ((attributes = sftp_readdir(sftp, dir)) != NULL) {
     filler(buf, attributes->name, NULL, 0);
   }
@@ -125,7 +123,7 @@ static int netfs_getattr(const char *path, struct stat *stbuf)
   char fpath[PATH_MAX];
   netfs_fullpath(fpath, path);
 
- // attributes = sftp_lstat(sftp, fpath);
+  // attributes = sftp_lstat(sftp, fpath);
   if ((attributes = sftp_lstat(sftp, fpath)) == NULL) {
     fprintf(stderr, "Unable to stat file/directory: %s\n", ssh_get_error(session));
     return -1;
@@ -187,9 +185,6 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
 
   sftp_attributes attributes = netfs_filesize(file);
   size_t file_size = attributes->size;
-  if (file_size > 4095) {
-    file_size = 4095;
-  }
 
   char *buf = malloc(file_size);
   int fd = open(tpath,  O_WRONLY | O_CREAT | O_TRUNC, attributes->permissions);
@@ -197,14 +192,37 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     fprintf(stderr, "I couldn't open /tmp/%s for writing.\n", tpath);
     return -1;
   }
-
-  if(sftp_read(file, buf, file_size) == file_size) {
-    if (write(fd, buf, file_size) == -1) {
-      fprintf(stderr, "Unable to write %s file.\n", tpath);
+  int nbytes, nwritten;
+  char buffer[16384];
+  for (;;) {
+    nbytes = sftp_read(file, buffer, sizeof(buffer));
+    if (nbytes == 0) {
+      break; // EOF
+    } else if (nbytes < 0) {
+      fprintf(stderr, "Error while reading file: %s\n",
+          ssh_get_error(session));
+      sftp_close(file);
+      return -1;
+    }
+    nwritten = write(fd, buf, nbytes);
+    if (nwritten != nbytes) {
+      fprintf(stderr, "Error writing: %s\n",
+          strerror(errno));
+      sftp_close(file);
       return -1;
     }
   }
 
+  /* if((bytes_read = sftp_read(file, buf, file_size)) == file_size) {
+     if (pwrite(fd, buf, file_size, 0) != file_size) {
+     fprintf(stderr, "Unable to write %s file.\n", tpath);
+     return -1;
+     }
+     } else {
+     fprintf(stderr, "couldn't read the file. %s %d\n", ssh_get_error(session), bytes_read);
+     return -1;
+     }
+     */
   fi->fh = fd; // store it to metadata.
   //close(fd);
   sftp_close(file);
@@ -229,7 +247,7 @@ static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
     return -1;
   }
 
-  if (read(fd, buf, size) < 0) {
+  if (pread(fd, buf, size, offset) < 0) {
     fprintf(stderr, "I couldn't read from %s.\n", tpath);
     return -1;
   }
@@ -238,7 +256,7 @@ static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
 }
 
 static int netfs_write(const char *path, const char *buf, size_t size, off_t offset,
-         struct fuse_file_info *file)
+    struct fuse_file_info *file)
 {
 
   char tpath[PATH_MAX];
@@ -280,6 +298,10 @@ static int netfs_flush(const char* path, struct fuse_file_info *fi) {
   int fd = fi->fh;
   close(fd); // flush and save the data
 
+  char fpath[PATH_MAX];
+  netfs_fullpath(fpath, path);
+
+  sftp_file remotefile = sftp_open(sftp, fpath, O_RDWR | O_CREAT | O_TRUNC, 0);
   fd = open(tpath, O_RDONLY); // READ from the temp file.
   if (fd == -1) {
     fprintf(stderr, "Unable to open temp file locally");
@@ -292,34 +314,32 @@ static int netfs_flush(const char* path, struct fuse_file_info *fi) {
     return -1;
   }
 
-  char *buf = malloc(st->st_size);
-  if (buf == NULL)
-    perror("malloc");
-
-  if ((nbytes = pread(fd, buf, st->st_size, 0)) == -1) {
-    fprintf(stderr, "I couldn't open %s for reading.\n", tpath);
-    return -1;
-  }
-  close(fd);
-
-  char fpath[PATH_MAX];
-  netfs_fullpath(fpath, path);
-
-  sftp_file remotefile = sftp_open(sftp, fpath, O_RDWR | O_CREAT | O_TRUNC, 0);
-
   if (remotefile == NULL) {
     fprintf(stderr, "I couldn't open remote %s for writing.\n", fpath);
     return -1;
   }
 
-  if ((nbytes = sftp_write(remotefile, buf, st->st_size)) == -1) {
-    fprintf(stderr, "I couldn't write to remote file  %s .\n", fpath);
-    return -1;
-  }
+  char buf[16384];
 
+  for(;;){
+    nbytes = read(fd, buf, sizeof(buf));
+    if (nbytes == 0){
+      break;
+    }
+    else if (nbytes < 0) {
+      fprintf(stderr, "I couldn't open %s for reading.\n", tpath);
+      return -1;
+    }
+
+    if ((sftp_write(remotefile, buf, nbytes)) != nbytes) {
+      fprintf(stderr, "I couldn't write to remote file  %s; %s .\n", fpath, ssh_get_error(session));
+      return -1;
+    }
+  }
 
   fprintf(stderr, "[DEBUG] WRITTEN TO REMOTE FILE %s\n", fpath);
 
+  close(fd);
   sftp_close(remotefile);
   return 0;
 }
@@ -367,7 +387,7 @@ int main(int argc, char *argv[])
   }
 
   //  show_remote_processes(session);
-//  fuse_opt_add_arg(NULL, "-obig_writes");
+  //  fuse_opt_add_arg(NULL, "-obig_writes");
 
   fuse_main_ret = fuse_main(argc-2, argv, &netfs_oper, netfs_state);
 

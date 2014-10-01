@@ -1,2 +1,2 @@
-alias fu='fusermount -u mdir'
+alias fu='fusermount -u netdir'
 alias nm='./netfs mdir -d 2>&1 >/dev/null | grep NETFS'
