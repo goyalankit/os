@@ -161,8 +161,9 @@ sftp_attributes netfs_filesize(sftp_file file) {
 
 
 /*
- * fi->flags: open flags
- *
+ * This methods downloads the file to /tmp
+ * directory and passes the file handler in the fuse_file_info.
+ * Subsequent requests will be served through the /tmp file
  *
  * */
 static int netfs_open(const char *path, struct fuse_file_info *fi)
@@ -224,6 +225,10 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
   return 0;
 }
 
+/*
+ * This method reads from the cache file and populates the provided buffer
+ *
+ * */
 static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
     struct fuse_file_info *fi)
 {
@@ -250,6 +255,10 @@ static int netfs_read(const char *path, char *buf, size_t size, off_t offset,
   return size;
 }
 
+/*
+ * This method writes to tmp file.
+ *
+ * */
 static int netfs_write(const char *path, const char *buf, size_t size, off_t offset,
     struct fuse_file_info *file)
 {
@@ -284,6 +293,10 @@ static int netfs_write(const char *path, const char *buf, size_t size, off_t off
   return size;
 }
 
+/*
+ * This method sends back the changes to remote server.
+ *
+ * */
 static int netfs_flush(const char* path, struct fuse_file_info *fi) {
   char tpath[PATH_MAX], fpath[PATH_MAX], buf[16384];
   int nbytes;
@@ -335,6 +348,10 @@ static int netfs_flush(const char* path, struct fuse_file_info *fi) {
 }
 
 
+/*
+ * Doing nothing. Just a stub method.
+ *
+ * */
 int netfs_utimens(const char* path, const struct timespec ts[2]) {
   return 0;
 }
@@ -386,7 +403,7 @@ int main(int argc, char *argv[])
 
   fuse_main_ret = fuse_main(argc-2, argv, &netfs_oper, netfs_state);
 
-  fprintf(stderr, "Successfuly");
+  fprintf(stderr, "Exiting Successfuly");
   disconnect_sftp(sftp);
   disconnect_ssh(session);
 
