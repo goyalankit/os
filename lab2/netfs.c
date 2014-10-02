@@ -106,6 +106,8 @@ static int netfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
     return -1;
   }
 
+  sftp_attributes_free(attributes);
+
   return EXIT_SUCCESS;
 }
 
@@ -142,8 +144,9 @@ static int netfs_getattr(const char *path, struct stat *stbuf)
   stbuf->st_mtime = attributes->mtime;
   stbuf->st_nlink = 1; // figure out a way to get hard link count
 
-  return 0;
+  sftp_attributes_free(attributes);
 
+  return 0;
 }
 
 sftp_attributes netfs_filesize(sftp_file file) {
@@ -206,6 +209,7 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
     }
     /* write */
     nwritten = write(fd, buffer, nbytes);
+    fprintf("Written %d\n", nbytes);
     if (nwritten != nbytes) {
       fprintf(stderr, "Error writing: %s\n",
           strerror(errno));
@@ -216,6 +220,7 @@ static int netfs_open(const char *path, struct fuse_file_info *fi)
 
   fi->fh = fd; // store it to metadata.
   sftp_close(file);
+  sftp_attributes_free(attributes);
   return 0;
 }
 
@@ -249,8 +254,8 @@ static int netfs_write(const char *path, const char *buf, size_t size, off_t off
     struct fuse_file_info *file)
 {
 
-  char tpath[PATH_MAX];
-  netfs_temppath(tpath, path);
+  //char tpath[PATH_MAX];
+  //netfs_temppath(tpath, path);
 
   int fd;
   if (file->fh != NULL && file->fh != -1) {
@@ -264,12 +269,12 @@ static int netfs_write(const char *path, const char *buf, size_t size, off_t off
   }
 
   if (fd == -1) {
-    fprintf(stderr, "Couldn't open %s for writing.\n", tpath);
+ //   fprintf(stderr, "Couldn't open %s for writing.\n", tpath);
     return -1;
   }
 
-  int nbytes;
-  int res = pwrite(fd, buf, size, offset);
+  int res = write(fd, buf, size);
+//  int res = pwrite(fd, buf, size, offset);
 
   if (res == -1) {
     perror("unable to write");
@@ -330,6 +335,10 @@ static int netfs_flush(const char* path, struct fuse_file_info *fi) {
 }
 
 
+int netfs_utimens(const char* path, const struct timespec ts[2]) {
+  return 0;
+}
+
 static struct fuse_operations netfs_oper = {
   .getattr = netfs_getattr,
   .readdir = netfs_readdir,
@@ -337,6 +346,7 @@ static struct fuse_operations netfs_oper = {
   .read = netfs_read,
   .write = netfs_write,
   .flush = netfs_flush,
+  .utimens= netfs_utimens,
 };
 
 
