@@ -6,6 +6,9 @@
  * http://www.skyfree.org/linux/references/ELF_Format.pdf
  * http://linux.die.net/man/5/elf
  *
+ * Aux vector type definitions
+ * http://lxr.free-electrons.com/source/include/uapi/linux/auxvec.h#L33
+ *
  * Stack Reference from http://articles.manugarg.com/aboutelfauxiliaryvectors.html
  *
 position            content                     size (bytes) + comment
@@ -62,7 +65,7 @@ void validate_elf(unsigned char *e_ident) {
   assert(e_ident[EI_DATA] == ELFDATA2LSB); // least significant byte -> lowest address(intel)
 }
 
-inline int getProt(Elf32_Word p_flags) {
+inline int getProt(Elf64_Word p_flags) {
   int prot = PROT_NONE;
 
   if (p_flags & PF_W)
@@ -107,7 +110,7 @@ void *load_elf_binary(char* buf, int fd)
   unsigned long alignedPgAddr; // pg_size - 1 == 000000 => will give rounded up bits
   unsigned long mapSize; // total map size. includes bits wasted due to allignment
   unsigned long offsetInFile; // offset in file
-  Elf32_Addr p_vaddr;
+  Elf64_Addr p_vaddr;
   int flags = MAP_PRIVATE | MAP_DENYWRITE;
   unsigned long k_bss;
   int base_address_set = 0;
