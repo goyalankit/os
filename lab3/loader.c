@@ -6,6 +6,38 @@
  * http://www.skyfree.org/linux/references/ELF_Format.pdf
  * http://linux.die.net/man/5/elf
  *
+ * Stack Reference from http://articles.manugarg.com/aboutelfauxiliaryvectors.html
+ *
+position            content                     size (bytes) + comment
+  ------------------------------------------------------------------------
+  stack pointer ->  [ argc = number of args ]     4
+                    [ argv[0] (pointer) ]         4   (program name)
+                    [ argv[1] (pointer) ]         4
+                    [ argv[..] (pointer) ]        4 * x
+                    [ argv[n - 1] (pointer) ]     4
+                    [ argv[n] (pointer) ]         4   (= NULL)
+
+                    [ envp[0] (pointer) ]         4
+                    [ envp[1] (pointer) ]         4
+                    [ envp[..] (pointer) ]        4
+                    [ envp[term] (pointer) ]      4   (= NULL)
+
+                    [ auxv[0] (Elf32_auxv_t) ]    8
+                    [ auxv[1] (Elf32_auxv_t) ]    8
+                    [ auxv[..] (Elf32_auxv_t) ]   8
+                    [ auxv[term] (Elf32_auxv_t) ] 8   (= AT_NULL vector)
+
+                    [ padding ]                   0 - 16
+
+                    [ argument ASCIIZ strings ]   >= 0
+                    [ environment ASCIIZ str. ]   >= 0
+
+  (0xbffffffc)      [ end marker ]                4   (= NULL)
+
+  (0xc0000000)      < bottom of stack >           0   (virtual)
+  ------------------------------------------------------------------------
+ *
+ *
  * Author: Ankit Goyal
  * */
 #include <stdio.h>
@@ -128,12 +160,75 @@ void *load_elf_binary(char* buf, int fd)
 
   // the entry point for program to execute
   DEBUG("Entry Point: %p\n", (void *)elfHeader->e_entry);
-  DEBUG("Base aaddress: %p\n", base_virtual_address);
+  DEBUG("Base aaddress: %li\n", base_virtual_address);
 
   return (void *)elfHeader->e_entry;;
 }
 
-int
+void modify_auxv(char *envp[], char *buf) {
+  Elf64_Ehdr *elfHeader;
+  elfHeader = (Elf64_Ehdr *)buf;
+  size_t pg_size;
+  ASSERT_I( (pg_size = sysconf(_SC_PAGE_SIZE)), "page size" );
+
+  Elf64_auxv_t *auxv;
+
+  while(*envp++ != NULL);
+
+  for (auxv = (Elf64_auxv_t *)envp; auxv->a_type != AT_NULL; auxv++) {
+    switch (auxv->a_type) {
+      case AT_PHDR:
+        {
+          DEBUG("AT_PHDR set\n");
+          auxv->a_un.a_val = (uint64_t)(buf + elfHeader->e_phoff);
+          break;
+        }
+      case AT_PHENT:
+        {
+          DEBUG("AT_PHENT set\n");
+          auxv->a_un.a_val = (uint64_t)(buf + elfHeader->e_phentsize);
+          break;
+        }
+      case AT_PHNUM:
+        {
+          DEBUG("AT_PHNUM set\n");
+          auxv->a_un.a_val =(uint64_t)(buf + elfHeader->e_phnum);
+          break;
+        }
+
+      case AT_PAGESZ:
+        {
+          DEBUG("AT_PAGESZ set\n");
+          auxv->a_un.a_val = pg_size;
+          break;
+        }
+
+      case AT_BASE:
+        {
+          DEBUG("AT_BASE set\n");
+          auxv->a_un.a_val = base_virtual_address;
+          break;
+        }
+
+      case AT_ENTRY:
+        {
+          DEBUG("AT_ENTRY set\n");
+          auxv->a_un.a_val = elfHeader->e_entry;
+          break;
+        }
+      case AT_EXECFN:
+        {
+          DEBUG("AT_EXECFN set\n");
+        }
+      default:
+        {
+          break;
+        }
+    }
+  }
+}
+
+  int
 main(int argc, char* argv[], char* envp[])
 {
   struct stat fstat;
@@ -166,7 +261,13 @@ main(int argc, char* argv[], char* envp[])
 
   ASSERT_I((fd = fileno(fh)), "fileno");
   e_entry = load_elf_binary(buf, fd);
+  modify_auxv(envp, buf);
 
   // close the file
   //ASSERT_I(fclose(fh), "fclose");
 }
+
+
+
+
+
