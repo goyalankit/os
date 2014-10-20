@@ -210,7 +210,13 @@ void modify_auxv(char *envp[], char *buf, void *argv) {
       case AT_ENTRY:
         {
           // Check that memory addresses don't clash with each other.
-          assert((auxv->a_un.a_val & ~(pg_size - 1)) != (((uint64_t)elfHeader->e_entry) & ~(pg_size - 1)));
+          // Not sure if this is exhaustive enough
+          if((auxv->a_un.a_val & ~(pg_size - 1)) ==
+              (((uint64_t)elfHeader->e_entry) & ~(pg_size - 1))){
+            fprintf(stderr,"-----\nPossible memory overlap \
+                \nExiting...\nGood bye!\n-----\n");
+            exit(-1);
+          }
           auxv->a_un.a_val = elfHeader->e_entry;
           break;
         }
@@ -277,6 +283,8 @@ main(int argc, char* argv[], char* envp[])
   modify_auxv(envp, buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
   e_entry = load_elf_binary(buf, fd);
 
+
+  // zero out all the registers and make them invalid by putting them in clobbered list.
   asm("xor %%rax, %%rax;"
       "xor %%rbx, %%rbx;"
       "xor %%rcx, %%rcx;"
@@ -296,7 +304,25 @@ main(int argc, char* argv[], char* envp[])
       :"%rax", "%rbx", "%rcx", "%rdx", "%rsi", "%rdi", "%rsp", "%r8", "%r9", "%r10", "%r11", "%r12", "%r13", "%r14", "%r15"
      );
 
+
+  // https://gcc.gnu.org/onlinedocs/gcc-4.5.1/gcc/Machine-Constraints.html
+  // "a" - General purpose register.
+  // update the stack pointer
+  asm("movq %0, %%rsp;"
+      :
+      :"a"(stack_ptr)
+      :"%rsp"
+      );
+
+  // jump to the entry of program
+  asm("jmp %0"
+      :
+      :"a"(e_entry)
+      :
+      );
+
   // close the file
   ASSERT_I(fclose(fh), "fclose");
+  return 0;
 }
 

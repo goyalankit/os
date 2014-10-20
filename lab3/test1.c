@@ -5,6 +5,6 @@ static char *username;
 int
 main() {
    int *zero = NULL;
-   printf("hello\n People!");
+   printf("hello People!\n");
    return 0;
 }

@@ -4,7 +4,7 @@
 #define ASSERT_I(x, y) ({  \
     if (x < 0){         \
     perror(y); \
-    exit(1);  } \
+    exit(-1);  } \
     x; \
 })
 
@@ -12,14 +12,14 @@
 #define ASSERT_P(x, y) do {  \
     if (x == NULL){         \
     perror(y); \
-    exit(1);  } \
+    exit(-1);  } \
 } while(0)
 
 
 #define CMP_AND_FAIL(x, y, z) do {\
   if (x != y) {\
     perror(z);\
-    exit(1); \
+    exit(-1); \
   }\
 } while(0)
 
