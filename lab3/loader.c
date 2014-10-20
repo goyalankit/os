@@ -165,15 +165,14 @@ void *load_elf_binary(char* buf, int fd)
   DEBUG("Entry Point: %p\n", (void *)elfHeader->e_entry);
   DEBUG("Base aaddress: %li\n", base_virtual_address);
 
-  return (void *)elfHeader->e_entry;;
+  return (void *)elfHeader->e_entry;
 }
 
-void modify_auxv(char *envp[], char *buf) {
+void modify_auxv(char *envp[], char *buf, void *argv) {
   Elf64_Ehdr *elfHeader;
   elfHeader = (Elf64_Ehdr *)buf;
   size_t pg_size;
   ASSERT_I( (pg_size = sysconf(_SC_PAGE_SIZE)), "page size" );
-
   Elf64_auxv_t *auxv;
 
   while(*envp++ != NULL);
@@ -182,46 +181,43 @@ void modify_auxv(char *envp[], char *buf) {
     switch (auxv->a_type) {
       case AT_PHDR:
         {
-          DEBUG("AT_PHDR set\n");
           auxv->a_un.a_val = (uint64_t)(buf + elfHeader->e_phoff);
           break;
         }
       case AT_PHENT:
         {
-          DEBUG("AT_PHENT set\n");
           auxv->a_un.a_val = (uint64_t)(buf + elfHeader->e_phentsize);
           break;
         }
       case AT_PHNUM:
         {
-          DEBUG("AT_PHNUM set\n");
           auxv->a_un.a_val =(uint64_t)(buf + elfHeader->e_phnum);
           break;
         }
 
       case AT_PAGESZ:
         {
-          DEBUG("AT_PAGESZ set\n");
           auxv->a_un.a_val = pg_size;
           break;
         }
 
       case AT_BASE:
         {
-          DEBUG("AT_BASE set\n");
           auxv->a_un.a_val = base_virtual_address;
           break;
         }
 
       case AT_ENTRY:
         {
-          DEBUG("AT_ENTRY set\n");
+          // Check that memory addresses don't clash with each other.
+          assert((auxv->a_un.a_val & ~(pg_size - 1)) != (((uint64_t)elfHeader->e_entry) & ~(pg_size - 1)));
           auxv->a_un.a_val = elfHeader->e_entry;
           break;
         }
       case AT_EXECFN:
         {
-          DEBUG("AT_EXECFN set\n");
+          auxv->a_un.a_val = *(unsigned long *)argv;
+          break;
         }
       default:
         {
@@ -231,7 +227,14 @@ void modify_auxv(char *envp[], char *buf) {
   }
 }
 
-  int
+/**
+ *
+ * Text Segment should be shifted.
+ * Load program under test on top of
+ * loader program leads to assertion failure
+ *
+ **/
+int
 main(int argc, char* argv[], char* envp[])
 {
   struct stat fstat;
@@ -240,7 +243,7 @@ main(int argc, char* argv[], char* envp[])
   int fd;
   char *buf;
   void *e_entry;
-
+  unsigned long *stack_ptr;
 
   if (argc < 2) {
     printf("Usage: %s <Valid Object/Executable ELF file>\n", argv[0]);
@@ -263,14 +266,37 @@ main(int argc, char* argv[], char* envp[])
   CMP_AND_FAIL(fread(buf, 1, size, fh), size, "fread");
 
   ASSERT_I((fd = fileno(fh)), "fileno");
+
+  // set the argc pointer to argv[0]
+  // set the value of argv[0] to argc - 1
+  // get the pointer to new argc which is also the stack pointer
+  stack_ptr = (unsigned long *)(&argv[0]);
+  // the new argc is argv[0].
+   *((int*) stack_ptr) = argc - 1;
+
+  modify_auxv(envp, buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
   e_entry = load_elf_binary(buf, fd);
-  modify_auxv(envp, buf);
+
+  asm("xor %%rax, %%rax;"
+      "xor %%rbx, %%rbx;"
+      "xor %%rcx, %%rcx;"
+      "xor %%rdx, %%rdx;"
+      "xor %%rsi, %%rsi;"
+      "xor %%rdi, %%rdi;"
+      "xor %%r8, %%r8;"
+      "xor %%r9, %%r9;"
+      "xor %%r10, %%r10;"
+      "xor %%r11, %%r11;"
+      "xor %%r12, %%r12;"
+      "xor %%r13, %%r13;"
+      "xor %%r14, %%r14;"
+      "xor %%r15, %%r15;"
+      :
+      :
+      :"%rax", "%rbx", "%rcx", "%rdx", "%rsi", "%rdi", "%rsp", "%r8", "%r9", "%r10", "%r11", "%r12", "%r13", "%r14", "%r15"
+     );
 
   // close the file
-  //ASSERT_I(fclose(fh), "fclose");
+  ASSERT_I(fclose(fh), "fclose");
 }
-
-
-
-
 

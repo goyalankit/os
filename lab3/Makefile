@@ -1,7 +1,7 @@
 all: clean loader.out test1.out test1.o
 
 loader.out:
-	gcc loader.c -o loader.out -DDBG
+	gcc loader.c -o loader.out -DDBG -static -m64
 
 test1.out:
 	gcc test1.c -o test1.out -Wl,-Ttext-segment=0x2000000 -static
