@@ -52,8 +52,12 @@ position            content                     size (bytes) + comment
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <assert.h>
+#include <signal.h>
 
 unsigned long base_virtual_address;
+Elf64_Ehdr *elfHeader;
+Elf64_Phdr *phHeader;
+int fd;
 
 // basic validation checks
 void validate_elf(unsigned char *e_ident) {
@@ -78,33 +82,11 @@ inline int getProt(Elf64_Word p_flags) {
   return prot;
 }
 
-void *load_elf_binary(char* buf, int fd)
-{
-  /*
-   * ELFheader is at a fixed location and has paramters
-   * required to understand the other components in the
-   * ELF file
-   *
-   * */
-  Elf64_Ehdr *elfHeader;
-  Elf64_Phdr *phHeader;
-  unsigned char *e_ident;
+
+void *map_single_page(unsigned long v_addr, int first_address) {
   long pg_size;
 
-  elfHeader = (Elf64_Ehdr *)buf;
-  e_ident   = elfHeader->e_ident;
-
-  // validate elf
-  validate_elf(e_ident);
-
-  // get program header that has information about parts that
-  // needs to be loaded in memory.
-  phHeader  = (Elf64_Phdr *)(buf + elfHeader->e_phoff);
-
-  // get the page size
   ASSERT_I( (pg_size = sysconf(_SC_PAGE_SIZE)), "page size" );
-  DEBUG("Page size: %ld\n", pg_size);
-
   int i, prot;
   unsigned long offsetInPg; // we need to add this number to tatal size
   unsigned long alignedPgAddr; // pg_size - 1 == 000000 => will give rounded up bits
@@ -116,58 +98,102 @@ void *load_elf_binary(char* buf, int fd)
   int base_address_set = 0;
 
   for (i = 0; i < elfHeader->e_phnum; ++i) {
-    // skip if it's not a load
     if (phHeader[i].p_type != PT_LOAD)
       continue;
-    p_vaddr       = phHeader[i].p_vaddr;
+
+    p_vaddr = phHeader[i].p_vaddr;
+
+    // check that if it's the first mapping.
+    if (first_address)
+      goto assign_mem;
+    else if  ((unsigned long)(p_vaddr <= v_addr) &&               // check that it's lies between the start
+        v_addr <= (unsigned long)(p_vaddr + phHeader[i].p_memsz)) // and end of virtual memory add. from file.
+      goto assign_mem;
+    else
+      continue; // continue and check the next index
+
+  // page mapping code
+assign_mem:
+
     offsetInPg    = p_vaddr & (pg_size - 1);
-    alignedPgAddr = p_vaddr & ~(pg_size - 1);
-    mapSize       = phHeader[i].p_filesz + offsetInPg;
-    offsetInFile  = phHeader[i].p_offset - offsetInPg;
+
+
+    // page size will always work since anything less than page size
+    // will be rounded off to page size.
+    //mapSize       = phHeader[i].p_filesz + offsetInPg;
+    mapSize = pg_size;
+
+    if (first_address) {
+      alignedPgAddr = p_vaddr & ~(pg_size - 1);
+      offsetInFile  = phHeader[i].p_offset - offsetInPg;
+    } else {
+      alignedPgAddr = v_addr & ~(pg_size - 1);
+      // explanation at http://i.imgur.com/Fh2eF08.jpg?1
+      // 1. Calculate the offset of page boundary of start address
+      // 2. Calulate the number of pages in between the seeked virtual
+      // address and the start address of this program header's virtual
+      // address range
+      offsetInFile = (unsigned long)phHeader[i].p_offset - (unsigned long)(p_vaddr &
+          (pg_size - 1)) + (v_addr & ~(pg_size - 1)) - (p_vaddr & ~(pg_size - 1));
+    }
+
     prot          = getProt(phHeader[i].p_flags);
 
     if (elfHeader->e_type == ET_EXEC)
       flags |= MAP_FIXED;
 
+    // for bss segment, we still need to map anonymous region
+    if (v_addr > (unsigned long)(p_vaddr + phHeader[i].p_filesz))
+      flags |= MAP_ANONYMOUS;
+
     char *m_map;
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
-
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
-
-    // we shift the base address using statuc link.
-    if (base_address_set == 0) {
+    // we shift the base address using static link.
+    if (first_address == 1 && base_address_set == 0) {
       base_virtual_address = (unsigned long)m_map;
       base_address_set = 1;
     }
-
-    // adjust the bss segment.
-    // bss doesn't occupy any space in file where as it does in memory
-    // Note that it is actually present as zero bytes in elf too.
-    if (phHeader[i].p_memsz > phHeader[i].p_filesz) {
-      alignedPgAddr = phHeader[i].p_vaddr + phHeader[i].p_filesz;
-      // move to next page and find the boundary
-      alignedPgAddr = (alignedPgAddr + pg_size - 1) & ~(pg_size - 1);
-      mapSize = phHeader[i].p_memsz - phHeader[i].p_filesz;
-
-      flags |= MAP_ANONYMOUS;
-      // map this region to Anonymous which is "zeroed" out
-      ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
-              flags, -1, 0)), "mmap");
-    }
-
-    DEBUG("Address %p\n", (void *)phHeader[i].p_vaddr);
-    unsigned long pg_offset = (p_vaddr & ~(pg_size -1));
-    DEBUG("pg_offset: %li\n", pg_offset);
+    break;
   }
+}
 
-  // the entry point for program to execute
-  DEBUG("Entry Point: %p\n", (void *)elfHeader->e_entry);
-  DEBUG("Base aaddress: %li\n", base_virtual_address);
+/*
+ * This method sets the elfheader and program header
+ * And loads the initial page into memory.
+ *
+ * */
+void *load_elf_binary(char* buf, int fdt)
+{
+  /*
+   * ELFheader is at a fixed location and has paramters
+   * required to understand the other components in the
+   * ELF file
+   *
+   * */
 
+  unsigned char *e_ident;
+  long pg_size;
+
+  elfHeader = (Elf64_Ehdr *)buf;
+  phHeader  = (Elf64_Phdr *)(buf + elfHeader->e_phoff);
+  e_ident   = elfHeader->e_ident;
+
+  // validate elf
+  validate_elf(e_ident);
+  fd = fdt;
+
+  // void *map_single_page(char *buf, int fd, unsigned long v_addr, int first_address) {
+  map_single_page(0, 1);
   return (void *)elfHeader->e_entry;
 }
 
+/*
+ * Reusing the stack. Modifying to accomodate changes
+ * for new program.
+ *
+ * */
 void modify_auxv(char *envp[], char *buf, void *argv) {
   Elf64_Ehdr *elfHeader;
   elfHeader = (Elf64_Ehdr *)buf;
@@ -233,6 +259,30 @@ void modify_auxv(char *envp[], char *buf, void *argv) {
   }
 }
 
+
+/*
+ * Segfault handler. On each page fault we allocate a memory page
+ * */
+static void segfault_handler(int sig, siginfo_t *info, void *uap) {
+  ASSERT_P(info, "Trying to derefence a null pointer");
+  map_single_page((unsigned long)info->si_addr, 0);
+}
+
+/*
+ * Reference:
+ * http://www.emoticode.net/c/custom-sigsegv-handler-with-backtrace-reporting.html
+ *
+ * */
+void install_segfault_handler() {
+  struct sigaction act;
+  sigemptyset(&act.sa_mask);
+  // we want the signinfo and we don't want to defer it.
+  // handle it now!
+  act.sa_flags = SA_SIGINFO | SA_NODEFER;
+  act.sa_handler = (void *)segfault_handler;
+  ASSERT_I((sigaction( SIGSEGV, &act, NULL)), "segfault handler");
+}
+
 /**
  *
  * Text Segment should be shifted.
@@ -240,7 +290,7 @@ void modify_auxv(char *envp[], char *buf, void *argv) {
  * loader program leads to assertion failure
  *
  **/
-int
+  int
 main(int argc, char* argv[], char* envp[])
 {
   struct stat fstat;
@@ -252,7 +302,7 @@ main(int argc, char* argv[], char* envp[])
   unsigned long *stack_ptr;
 
   if (argc < 2) {
-    printf("Usage: %s <Valid Executable ELF file>\n", argv[0]);
+    printf("Usage: %s <Valid Object/Executable ELF file>\n", argv[0]);
     exit(1);
   }
 
@@ -278,11 +328,15 @@ main(int argc, char* argv[], char* envp[])
   // get the pointer to new argc which is also the stack pointer
   stack_ptr = (unsigned long *)(&argv[0]);
   // the new argc is argv[0].
-   *((int*) stack_ptr) = argc - 1;
+  *((int*) stack_ptr) = argc - 1;
 
   modify_auxv(envp, buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
+  DEBUG("Modified auxillary vector\n");
   e_entry = load_elf_binary(buf, fd);
+  DEBUG("Loaded the first page of elf binary.\n");
 
+  // installing the segfault handler.
+  install_segfault_handler();
 
   // zero out all the registers and make them invalid by putting them in clobbered list.
   asm("xor %%rax, %%rax;"
@@ -312,16 +366,17 @@ main(int argc, char* argv[], char* envp[])
       :
       :"a"(stack_ptr)
       :"%rsp"
-      );
+     );
+  DEBUG("Set the stack pointer. Going to start executing now.\n");
 
   // jump to the entry of program
   asm("jmp %0"
       :
       :"a"(e_entry)
       :
-      );
+     );
 
-  // close the file
+  // close the file.
   ASSERT_I(fclose(fh), "fclose");
   return 0;
 }

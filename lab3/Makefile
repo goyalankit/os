@@ -1,4 +1,7 @@
-all: clean loader.out test1.out test1.o
+all: clean loader.out test1.out demand_loader.out test1.o
+
+demand_loader.out:
+	gcc demand_loader.c -o demand_loader.out -static -m64
 
 loader.out:
 	gcc loader.c -o loader.out -DDBG -static -m64

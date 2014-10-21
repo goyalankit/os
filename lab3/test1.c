@@ -1,10 +1,16 @@
 #include <stdio.h>
-
-static char *username;
+#include <string.h>
+#include <stdlib.h>
 
 int
 main() {
-   int *zero = NULL;
-   printf("hello People!\n");
-   return 0;
+  printf("hello world\n");
+  int i;
+  for (i=0; i<10; i++) {
+    printf("Number: %d\n", i);
+  }
+  char *name = (char *)malloc(sizeof(char) * 8);
+  name = "ankit";
+  printf("Name: %s\n", name);
+  return 0;
 }
