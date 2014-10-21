@@ -96,6 +96,7 @@ void *map_single_page(unsigned long v_addr, int first_address) {
   int flags = MAP_PRIVATE | MAP_DENYWRITE;
   unsigned long k_bss;
   int base_address_set = 0;
+  int someAddressAssigned = 0;
 
   for (i = 0; i < elfHeader->e_phnum; ++i) {
     if (phHeader[i].p_type != PT_LOAD)
@@ -114,7 +115,7 @@ void *map_single_page(unsigned long v_addr, int first_address) {
 
   // page mapping code
 assign_mem:
-
+    someAddressAssigned = 1;
     offsetInPg    = p_vaddr & (pg_size - 1);
 
 
@@ -149,6 +150,7 @@ assign_mem:
     char *m_map;
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
+    fprintf(stderr, "Mapping aligned  virtual address at %li\n", alignedPgAddr);
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
     // we shift the base address using static link.
     if (first_address == 1 && base_address_set == 0) {
@@ -156,6 +158,11 @@ assign_mem:
       base_address_set = 1;
     }
     break;
+  }
+  if (someAddressAssigned == 0) {
+    // raise the segmenation fault again.
+    // not sure why this is not getting caught.
+    raise(SIGSEGV);
   }
 }
 

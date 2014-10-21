@@ -132,6 +132,7 @@ void *load_elf_binary(char* buf, int fd)
     char *m_map;
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
+    fprintf(stderr, "Mapping aligned virtual address at %li\n", alignedPgAddr);
 
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
 
@@ -156,9 +157,6 @@ void *load_elf_binary(char* buf, int fd)
               flags, -1, 0)), "mmap");
     }
 
-    DEBUG("Address %p\n", (void *)phHeader[i].p_vaddr);
-    unsigned long pg_offset = (p_vaddr & ~(pg_size -1));
-    DEBUG("pg_offset: %li\n", pg_offset);
   }
 
   // the entry point for program to execute
