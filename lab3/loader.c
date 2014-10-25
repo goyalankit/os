@@ -184,12 +184,12 @@ void modify_auxv(char *envp[], char *buf, void *argv) {
         }
       case AT_PHENT:
         {
-          auxv->a_un.a_val = (uint64_t)(buf + elfHeader->e_phentsize);
+          auxv->a_un.a_val = (uint64_t)(elfHeader->e_phentsize);
           break;
         }
       case AT_PHNUM:
         {
-          auxv->a_un.a_val =(uint64_t)(buf + elfHeader->e_phnum);
+          auxv->a_un.a_val =(uint64_t)(elfHeader->e_phnum);
           break;
         }
 
