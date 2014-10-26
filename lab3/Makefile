@@ -1,4 +1,7 @@
-all: clean loader.out test1.out demand_loader.out test1.o os_test.out
+all: clean loader.out test1.out demand_loader.out hybrid_loader.out test1.o os_test.out
+
+hybrid_loader.out:
+	gcc hybrid_loader.c -o hybrid_loader.out -static
 
 demand_loader.out:
 	gcc demand_loader.c -o demand_loader.out -static -m64
