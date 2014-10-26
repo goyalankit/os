@@ -57,6 +57,8 @@ position            content                     size (bytes) + comment
 unsigned long base_virtual_address;
 Elf64_Ehdr *elfHeader;
 Elf64_Phdr *phHeader;
+int correct_future_told = 0;
+unsigned long predicted_address;
 int fd;
 
 // basic validation checks
@@ -82,11 +84,30 @@ inline int getProt(Elf64_Word p_flags) {
   return prot;
 }
 
-
-void *map_bss_page(unsigned long v_addr, int first_address) {
+void *map_bss_page(unsigned long v_addr) {
   long pg_size;
+  int flags = MAP_PRIVATE | MAP_DENYWRITE;
   ASSERT_I( (pg_size = sysconf(_SC_PAGE_SIZE)), "page size" );
-  fprintf(stderr, "Faulting on address: %li\n", v_addr);
+
+  int i;
+  unsigned long memSize, offset;
+  for (i = 0; i < elfHeader->e_phnum; ++i) {
+    if (phHeader[i].p_type != PT_LOAD ) continue;
+    if (v_addr >= phHeader[i].p_vaddr && v_addr < (phHeader[i].p_vaddr + phHeader[i].p_memsz)) {
+      memSize = pg_size;
+      // offset.                offset from top   -        offset of start addr
+      offset = (unsigned long)phHeader[i].p_offset - (phHeader[i].p_vaddr & (pg_size -1))
+        + ((v_addr - phHeader[i].p_vaddr) & ~(pg_size - 1));
+      if (v_addr > (unsigned long)(phHeader[i].p_vaddr + phHeader[i].p_filesz))
+        flags |= MAP_ANONYMOUS;
+
+      ASSERT_I(mmap((caddr_t)(v_addr & ~(pg_size-1)), memSize,
+            getProt(phHeader[i].p_flags), flags, fd, offset), "mmap");
+      fprintf(stderr, "[BSS] Mapping aligned virtual address at %li\n", (v_addr & ~(pg_size - 1)));
+      break;
+    }
+  }
+
 }
 
 
@@ -98,8 +119,6 @@ void *load_elf_binary(char* buf, int fd)
    * ELF file
    *
    * */
-  Elf64_Ehdr *elfHeader;
-  Elf64_Phdr *phHeader;
   unsigned char *e_ident;
   long pg_size;
 
@@ -155,7 +174,7 @@ void *load_elf_binary(char* buf, int fd)
       base_address_set = 1;
     }
 
-  // not adjusting the bss here
+    // not adjusting the bss here
   }
 
   return (void *)elfHeader->e_entry;
@@ -233,13 +252,40 @@ void modify_auxv(char *envp[], char *buf, void *argv) {
 }
 
 
+
+void clairvoyant_method(unsigned long addr, unsigned long pg_size) {
+
+  if (predicted_address == (addr & ~(pg_size - 1))){
+    correct_future_told++;
+    fprintf(stderr, "Predicted Correctly\n");
+  } else {
+    if (correct_future_told > 0)
+      correct_future_told--;
+    fprintf(stderr, "Ooh Slow Down! wrong prediction\n");
+  }
+
+  if (correct_future_told == 1) {
+    map_bss_page((unsigned long)(addr + pg_size));
+    correct_future_told++;
+  } else if (correct_future_told >= 2) {
+    map_bss_page((unsigned long)(addr + pg_size));
+    map_bss_page((unsigned long)(addr + (2 * pg_size)));
+    correct_future_told++;
+  } else {
+    predicted_address = (addr & ~(pg_size - 1)) + pg_size;
+  }
+}
+
 /*
  * Segfault handler. On each page fault we allocate a memory page
  * */
 static void segfault_handler(int sig, siginfo_t *info, void *uap) {
+  unsigned long pg_size;
+  ASSERT_I( (pg_size = sysconf(_SC_PAGE_SIZE)), "page size" );
   ASSERT_P(info, "Trying to derefence a null pointer");
-  DEBUG("Defaulting address...");
-  map_bss_page((unsigned long)info->si_addr, 0);
+  fprintf(stderr, "mapping...\n");
+  map_bss_page((unsigned long)(info->si_addr));
+  clairvoyant_method((unsigned long)info->si_addr, pg_size);
 }
 
 /*
