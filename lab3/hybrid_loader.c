@@ -59,7 +59,12 @@ Elf64_Ehdr *elfHeader;
 Elf64_Phdr *phHeader;
 int correct_future_told = 0;
 unsigned long predicted_address;
+unsigned long totalMemMapped = 0;
 int fd;
+
+typedef int bool;
+#define true 1
+#define false 0
 
 // basic validation checks
 void validate_elf(unsigned char *e_ident) {
@@ -84,16 +89,18 @@ inline int getProt(Elf64_Word p_flags) {
   return prot;
 }
 
-void *map_bss_page(unsigned long v_addr) {
+void *map_bss_page(unsigned long v_addr, bool predicted) {
   long pg_size;
   int flags = MAP_PRIVATE | MAP_DENYWRITE;
   ASSERT_I( (pg_size = sysconf(_SC_PAGE_SIZE)), "page size" );
 
   int i;
   unsigned long memSize, offset;
+  int someAddressAssigned = 0;
   for (i = 0; i < elfHeader->e_phnum; ++i) {
     if (phHeader[i].p_type != PT_LOAD ) continue;
     if (v_addr >= phHeader[i].p_vaddr && v_addr < (phHeader[i].p_vaddr + phHeader[i].p_memsz)) {
+      someAddressAssigned = 1;
       memSize = pg_size;
       // offset.                offset from top   -        offset of start addr
       offset = (unsigned long)phHeader[i].p_offset - (phHeader[i].p_vaddr & (pg_size -1))
@@ -103,9 +110,19 @@ void *map_bss_page(unsigned long v_addr) {
 
       ASSERT_I(mmap((caddr_t)(v_addr & ~(pg_size-1)), memSize,
             getProt(phHeader[i].p_flags), flags, fd, offset), "mmap");
-      fprintf(stderr, "[BSS] Mapping aligned virtual address at %li\n", (v_addr & ~(pg_size - 1)));
+      totalMemMapped += memSize;
+      fprintf(stderr, "[BSS] Mapping aligned virtual address at %li and TMP: %li\n", (v_addr & ~(pg_size - 1)), totalMemMapped);
       break;
     }
+  }
+
+ if (someAddressAssigned == 0 && !predicted) {
+   //fprintf(stderr, "Address Faulted: %li\n", v_addr);
+    // raise the segmenation fault again.
+    // not sure why this is not getting caught.
+    raise(SIGSEGV);
+  } else {
+    return;
   }
 
 }
@@ -164,7 +181,8 @@ void *load_elf_binary(char* buf, int fd)
     char *m_map;
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
-    fprintf(stderr, "Mapping aligned virtual address at %li\n", alignedPgAddr);
+    totalMemMapped += mapSize;
+    fprintf(stderr, "Mapping aligned virtual address at %li and TM: %li\n", alignedPgAddr, totalMemMapped);
 
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
 
@@ -257,20 +275,18 @@ void clairvoyant_method(unsigned long addr, unsigned long pg_size) {
 
   if (predicted_address == (addr & ~(pg_size - 1))){
     correct_future_told++;
-    fprintf(stderr, "Predicted Correctly\n");
+    //fprintf(stderr, "Predicted Correctly\n");
   } else {
     if (correct_future_told > 0)
       correct_future_told--;
-    fprintf(stderr, "Ooh Slow Down! wrong prediction\n");
+    //fprintf(stderr, "Ooh Slow Down! wrong prediction\n");
   }
 
   if (correct_future_told == 1) {
-    map_bss_page((unsigned long)(addr + pg_size));
-    correct_future_told++;
+    map_bss_page((unsigned long)(addr + pg_size), true);
   } else if (correct_future_told >= 2) {
-    map_bss_page((unsigned long)(addr + pg_size));
-    map_bss_page((unsigned long)(addr + (2 * pg_size)));
-    correct_future_told++;
+    map_bss_page((unsigned long)(addr + pg_size), true);
+    map_bss_page((unsigned long)(addr + (2 * pg_size)), true);
   } else {
     predicted_address = (addr & ~(pg_size - 1)) + pg_size;
   }
@@ -283,8 +299,8 @@ static void segfault_handler(int sig, siginfo_t *info, void *uap) {
   unsigned long pg_size;
   ASSERT_I( (pg_size = sysconf(_SC_PAGE_SIZE)), "page size" );
   ASSERT_P(info, "Trying to derefence a null pointer");
-  fprintf(stderr, "mapping...\n");
-  map_bss_page((unsigned long)(info->si_addr));
+  //fprintf(stderr, "mapping...\n");
+  map_bss_page((unsigned long)(info->si_addr), false);
   clairvoyant_method((unsigned long)info->si_addr, pg_size);
 }
 
@@ -396,6 +412,7 @@ main(int argc, char* argv[], char* envp[])
       :
      );
 
+  //fprintf(stderr, "Total Memory Mapped %li bytes", totalMemMapped);
   // close the file.
   ASSERT_I(fclose(fh), "fclose");
   return 0;

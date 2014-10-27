@@ -58,6 +58,7 @@ unsigned long base_virtual_address;
 Elf64_Ehdr *elfHeader;
 Elf64_Phdr *phHeader;
 int fd;
+unsigned long totalMemoryMapped = 0;
 
 // basic validation checks
 void validate_elf(unsigned char *e_ident) {
@@ -150,7 +151,8 @@ assign_mem:
     char *m_map;
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
-    fprintf(stderr, "Mapping aligned  virtual address at %li\n", alignedPgAddr);
+    totalMemoryMapped += mapSize;
+    fprintf(stderr, "Mapping aligned  virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
     // we shift the base address using static link.
     if (first_address == 1 && base_address_set == 0) {

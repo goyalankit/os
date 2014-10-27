@@ -1,4 +1,4 @@
-all: clean loader.out test1.out demand_loader.out hybrid_loader.out test1.o os_test.out
+all: clean loader.out test1.out test2.out test3.out demand_loader.out hybrid_loader.out test1.o os_test.out
 
 hybrid_loader.out:
 	gcc hybrid_loader.c -o hybrid_loader.out -static
@@ -10,7 +10,13 @@ loader.out:
 	gcc loader.c -o loader.out -DDBG -static -m64 -g
 
 test1.out:
-	gcc test1.c -o test1.out -Wl,-Ttext-segment=0x2000000 -static
+	gcc test1.c -o test1.out -Wl,-Ttext-segment=0x2000000 -static -O0
+
+test2.out:
+	gcc test2.c -o test2.out -Wl,-Ttext-segment=0x2000000 -static -O0
+
+test3.out:
+	gcc test3.c -o test3.out -Wl,-Ttext-segment=0x2000000 -static -O0
 
 test1.o:
 	gcc test1.c -c -o test1.o

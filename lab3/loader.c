@@ -54,6 +54,7 @@ position            content                     size (bytes) + comment
 #include <assert.h>
 
 unsigned long base_virtual_address;
+unsigned long totalMemoryMapped = 0;
 
 // basic validation checks
 void validate_elf(unsigned char *e_ident) {
@@ -132,7 +133,8 @@ void *load_elf_binary(char* buf, int fd)
     char *m_map;
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
-    fprintf(stderr, "Mapping aligned virtual address at %li\n", alignedPgAddr);
+    totalMemoryMapped += mapSize;
+    fprintf(stderr, "Mapping aligned virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
 
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
 
@@ -155,6 +157,8 @@ void *load_elf_binary(char* buf, int fd)
       // map this region to Anonymous which is "zeroed" out
       ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
               flags, -1, 0)), "mmap");
+      totalMemoryMapped += mapSize;
+      fprintf(stderr, "[BSS]Mapping aligned virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
     }
 
   }
