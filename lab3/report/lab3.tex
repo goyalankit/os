@@ -1,0 +1,68 @@
+\documentclass[10pt] {article}
+\usepackage{fourier}
+\author{Ankit Goyal \\ankit@cs.utexas.edu \\ CS380L}
+\title{Lab 3: Program loading and memory mapping}
+\date{\today}	
+\usepackage{full page}
+\usepackage{minted} % to insert code
+\renewcommand\listingscaption{Codeblock}
+
+
+
+\usepackage{hyperref, url}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{amsmath}
+%\usepackage{amsmath, enumerate, url, ulem, algorithmic, polynom, subfig}
+
+\setlength\parindent{0pt}
+
+\begin{document}
+\maketitle
+%----------------------------------------------------------------------------------------
+%  Specs
+%----------------------------------------------------------------------------------------
+
+\section{Setup}
+\subsection{Hardware}
+\textbf{Host Processor}: 64 bit 4 core Intel(R) Xeon(R) CPU E3-1270 V2 @ 3.50GHz\\
+\textbf{Host Memory}: 16GB \\
+\textbf{HyperThreading}: Yes \\
+\textbf{Logical CPUs after Hyperthreading}: 8 \\
+\textbf{CPU frequency scaling}: Disabled in BIOS (turned off Intel SpeedStep and C-states)
+
+\subsection{Software}
+\textbf{Host Operating System}: Ubuntu with 3.13.0-34-generic 64 bit kernel.\\
+
+\section{Creating the memory image of a new process}
+
+\texttt{sys\_execve} is responsible for setting up the environment for running the program. Below are the steps taken by \texttt{sys\_execve} which calls  \texttt{do\_execve\_common}:
+
+\begin{enumerate}
+\item Check that \texttt{NPROC} limit is not exceeded (i.e., total number of process), if it is then exit. (L: 1443)
+\item Allocate memory for data structure in kernel. (L: 1458) 
+\item Open the \texttt{exec} file using \texttt{do\_open\_exec} (L: 1469)
+\item Now the kernel data structures are initialized and \texttt{exec\_binprm} is called. 
+\item \texttt{exec\_binprm} calls \texttt{search\_binary\_handler} which finds the binary format handler, in our case elf. So it finds \texttt{load\_elf\_binary}. (fs/binfmt\_elf.c L:84 \& 571)
+\begin{itemize}
+\item \texttt{load\_elf\_binary} does consistency checks by making sure that it's an ELF format file by comparing the main number and ELF in \texttt{e\_ident} field in header.
+\item \texttt{load\_elf\_binary} reads the header information and looks for \texttt{PT\_INTERP} segment to see if an interpreter was specified. This segment is only present for dynamically linked programs and not for statically linked.
+\end{itemize}
+\end{enumerate}
+
+\noindent \textbf{Time Spent on the lab \ensuremath{\approx} 30 hours} 
+
+\section{References}
+\begin{enumerate}
+  \item http://eli.thegreenplace.net/2012/08/13/how-statically-linked-programs-run-on-linux/
+  \item http://www.skyfree.org/linux/references/ELF\_Format.pdf
+  \item http://linux.die.net/man/5/elf
+  \item http://articles.manugarg.com/aboutelfauxiliaryvectors.html
+  \item  http://pubs.opengroup.org/onlinepubs/009695399/functions/sigaction.html
+  \item http://stackoverflow.com/questions/8116648/why-is-the-elf-entry-point-0x8048000-not-changeable
+  \item http://lxr.free-electrons.com/source/fs/exec.c\#L1425
+\end{enumerate}
+
+\end{document}
