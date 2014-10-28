@@ -285,9 +285,11 @@ void clairvoyant_method(unsigned long addr, unsigned long pg_size) {
 
   if (correct_future_told == 1) {
     map_bss_page((unsigned long)(addr + pg_size), true);
+    predicted_address = (addr & ~(pg_size - 1)) + pg_size;
   } else if (correct_future_told >= 2) {
     map_bss_page((unsigned long)(addr + pg_size), true);
     map_bss_page((unsigned long)(addr + (2 * pg_size)), true);
+    predicted_address = (addr & ~(pg_size - 1)) + (pg_size * 2);
   } else {
     predicted_address = (addr & ~(pg_size - 1)) + pg_size;
   }

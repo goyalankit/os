@@ -16,7 +16,7 @@ main() {
 
   printf("hello world\n");
   int i;
-  for (i=0; i<1000000; i++) {
+  for (i=0; i<1000000/2; i++) {
     xRan = rand()%100000;
     a[xRan] = i;
   }
