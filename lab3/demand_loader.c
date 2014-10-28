@@ -145,8 +145,10 @@ assign_mem:
       flags |= MAP_FIXED;
 
     // for bss segment, we still need to map anonymous region
-    if (v_addr > (unsigned long)(p_vaddr + phHeader[i].p_filesz))
+    if (v_addr > (unsigned long)(p_vaddr + phHeader[i].p_filesz)) {
       flags |= MAP_ANONYMOUS;
+      fprintf(stderr, "[BSS]");
+    }
 
     char *m_map;
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
@@ -161,6 +163,7 @@ assign_mem:
     }
     break;
   }
+
   if (someAddressAssigned == 0) {
     // raise the segmenation fault again.
     // not sure why this is not getting caught.
@@ -298,6 +301,8 @@ void install_segfault_handler() {
  * Load program under test on top of
  * loader program leads to assertion failure
  *
+ * Note: stack creation code in header file. loader.h
+ *
  **/
   int
 main(int argc, char* argv[], char* envp[])
@@ -314,6 +319,9 @@ main(int argc, char* argv[], char* envp[])
     printf("Usage: %s <Valid Object/Executable ELF file>\n", argv[0]);
     exit(1);
   }
+
+  unsigned long *loader_stack = (unsigned long*)(&argv[0]);
+  size_t stack_size =  loaderStackSize(envp, loader_stack);
 
   // open the binary file
   ASSERT_P( (fh = fopen(argv[1], "rb")), "open" );
@@ -332,15 +340,22 @@ main(int argc, char* argv[], char* envp[])
 
   ASSERT_I((fd = fileno(fh)), "fileno");
 
+  // create new stack
+  stack_ptr = create_new_stack(loader_stack, stack_size);
+
   // set the argc pointer to argv[0]
   // set the value of argv[0] to argc - 1
   // get the pointer to new argc which is also the stack pointer
-  stack_ptr = (unsigned long *)(&argv[0]);
   // the new argc is argv[0].
   *((int*) stack_ptr) = argc - 1;
 
-  modify_auxv(envp, buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
+  // check that it is created correctly
+  char **filename = (char **)((stack_ptr+1));
+  DEBUG("stack copied: %d, %s\n", stack_size, filename[0]);
+
+  modify_auxv((char **)(stack_ptr+argc+1), buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
   DEBUG("Modified auxillary vector\n");
+
   e_entry = load_elf_binary(buf, fd);
   DEBUG("Loaded the first page of elf binary.\n");
 

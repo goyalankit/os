@@ -11,7 +11,7 @@ main() {
   double elapsed;
   gettimeofday(&begin, NULL);
   printf("hello world\n");
-  int k[100][100];
+  //int k[100][100];
   int i;
   for (i=0; i<1000000; i++) {
     a[i] = 12;

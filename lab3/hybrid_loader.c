@@ -97,6 +97,7 @@ void *map_bss_page(unsigned long v_addr, bool predicted) {
   int i;
   unsigned long memSize, offset;
   int someAddressAssigned = 0;
+  //fprintf(stderr, "", v_addr);
   for (i = 0; i < elfHeader->e_phnum; ++i) {
     if (phHeader[i].p_type != PT_LOAD ) continue;
     if (v_addr >= phHeader[i].p_vaddr && v_addr < (phHeader[i].p_vaddr + phHeader[i].p_memsz)) {
@@ -122,7 +123,7 @@ void *map_bss_page(unsigned long v_addr, bool predicted) {
     // not sure why this is not getting caught.
     raise(SIGSEGV);
   } else {
-    return;
+    return NULL;
   }
 
 }
@@ -342,6 +343,9 @@ main(int argc, char* argv[], char* envp[])
     exit(1);
   }
 
+  unsigned long *loader_stack = (unsigned long*)(&argv[0]);
+  size_t stack_size =  loaderStackSize(envp, loader_stack);
+
   // open the binary file
   ASSERT_P( (fh = fopen(argv[1], "rb")), "open" );
   DEBUG("Opened the file\n");
@@ -359,20 +363,29 @@ main(int argc, char* argv[], char* envp[])
 
   ASSERT_I((fd = fileno(fh)), "fileno");
 
+  // create new stack
+  stack_ptr = create_new_stack(loader_stack, stack_size);
+
   // set the argc pointer to argv[0]
   // set the value of argv[0] to argc - 1
   // get the pointer to new argc which is also the stack pointer
-  stack_ptr = (unsigned long *)(&argv[0]);
+  //stack_ptr = (unsigned long *)(&argv[0]);
   // the new argc is argv[0].
   *((int*) stack_ptr) = argc - 1;
 
-  modify_auxv(envp, buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
+  // check that it is created correctly
+  char **filename = (char **)((stack_ptr+1));
+  DEBUG("stack copied: %d, %s\n", stack_size, filename[0]);
+
+  modify_auxv((char **)(stack_ptr+argc+1), buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
   DEBUG("Modified auxillary vector\n");
+
   e_entry = load_elf_binary(buf, fd);
   DEBUG("Loaded the first page of elf binary.\n");
 
   // installing the segfault handler.
   install_segfault_handler();
+//  fprintf(stderr, "Entry Address: %li, Stack Address: %li\n", e_entry, stack_ptr);
 
   // zero out all the registers and make them invalid by putting them in clobbered list.
   asm("xor %%rax, %%rax;"

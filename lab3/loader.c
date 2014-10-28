@@ -52,6 +52,7 @@ position            content                     size (bytes) + comment
 #include <sys/types.h>
 #include <sys/mman.h>
 #include <assert.h>
+#include <string.h>
 
 unsigned long base_virtual_address;
 unsigned long totalMemoryMapped = 0;
@@ -170,12 +171,14 @@ void *load_elf_binary(char* buf, int fd)
   return (void *)elfHeader->e_entry;
 }
 
-void modify_auxv(char *envp[], char *buf, void *argv) {
+void modify_auxv(char **envp, char *buf, void *argv) {
   Elf64_Ehdr *elfHeader;
   elfHeader = (Elf64_Ehdr *)buf;
   size_t pg_size;
   ASSERT_I( (pg_size = sysconf(_SC_PAGE_SIZE)), "page size" );
+
   Elf64_auxv_t *auxv;
+  DEBUG("Got the env pointer %s\n", envp[0]);
 
   while(*envp++ != NULL);
 
@@ -183,6 +186,7 @@ void modify_auxv(char *envp[], char *buf, void *argv) {
     switch (auxv->a_type) {
       case AT_PHDR:
         {
+          DEBUG("[AUXV] changed the phoff\n");
           auxv->a_un.a_val = (uint64_t)(buf + elfHeader->e_phoff);
           break;
         }
@@ -235,6 +239,31 @@ void modify_auxv(char *envp[], char *buf, void *argv) {
   }
 }
 
+/*
+
+unsigned long *create_new_stack(unsigned long *loader_stack, size_t stack_size) {
+  unsigned long *stack;
+  int stack_prot = PROT_READ | PROT_WRITE | PROT_EXEC;
+  int flags = (MAP_GROWSDOWN | MAP_ANONYMOUS | MAP_PRIVATE);
+  ASSERT_I((stack = mmap(NULL, STACK_SIZE, stack_prot, flags, -1, 0)), "mmap");
+  CMP_AND_FAIL(memcpy(stack, loader_stack, stack_size), stack, "memcpy");
+  return stack;
+}
+
+size_t loaderStackSize(char** envp, void *top_stack) {
+  while(*envp++ != NULL);
+  Elf64_auxv_t *aux_v = (Elf64_auxv_t *)envp;
+  for (; aux_v->a_type != AT_NULL; aux_v++);
+  aux_v++;
+  int *padding = (int *)aux_v;
+  padding++;
+  char *asciiz = (char *)padding;
+  asciiz++;
+  void *bottom_stack = asciiz;
+  return ((unsigned long)(bottom_stack) - (unsigned long)(top_stack)) ;
+}
+*/
+
 /**
  *
  * Text Segment should be shifted.
@@ -242,7 +271,7 @@ void modify_auxv(char *envp[], char *buf, void *argv) {
  * loader program leads to assertion failure
  *
  **/
-int
+  int
 main(int argc, char* argv[], char* envp[])
 {
   struct stat fstat;
@@ -257,6 +286,10 @@ main(int argc, char* argv[], char* envp[])
     printf("Usage: %s <Valid Executable ELF file>\n", argv[0]);
     exit(1);
   }
+
+  unsigned long *loader_stack = (unsigned long*)(&argv[0]);
+  size_t stack_size =  loaderStackSize(envp, loader_stack);
+  //printf("Stack size: %d\n", stack_size);
 
   // open the binary file
   ASSERT_P( (fh = fopen(argv[1], "rb")), "open" );
@@ -275,16 +308,21 @@ main(int argc, char* argv[], char* envp[])
 
   ASSERT_I((fd = fileno(fh)), "fileno");
 
+  // create new stack
+  stack_ptr = create_new_stack(loader_stack, stack_size);
+
   // set the argc pointer to argv[0]
   // set the value of argv[0] to argc - 1
   // get the pointer to new argc which is also the stack pointer
-  stack_ptr = (unsigned long *)(&argv[0]);
+  //stack_ptr = (unsigned long *)(stack_ptr + 1);
   // the new argc is argv[0].
-   *((int*) stack_ptr) = argc - 1;
+  *((int*) stack_ptr) = argc - 1;
+  char **filename = (char **)((stack_ptr+1));
+  DEBUG("stack copied: %d, %s\n", stack_size, filename[0]);
 
-  modify_auxv(envp, buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
+  modify_auxv((char **)(stack_ptr+argc+1), buf, (stack_ptr+1)); // stack_ptr + 1 points to new filename
   e_entry = load_elf_binary(buf, fd);
-
+  DEBUG("Created the stack\n");
 
   // zero out all the registers and make them invalid by putting them in clobbered list.
   asm("xor %%rax, %%rax;"
@@ -314,17 +352,17 @@ main(int argc, char* argv[], char* envp[])
       :
       :"a"(stack_ptr)
       :"%rsp"
-      );
+     );
 
   // jump to the entry of program
   asm("jmp %0"
       :
       :"a"(e_entry)
       :
-      );
+     );
 
   // close the file
-  ASSERT_I(fclose(fh), "fclose");
+    ASSERT_I(fclose(fh), "fclose");
   return 0;
 }
 
