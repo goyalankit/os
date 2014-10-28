@@ -135,7 +135,8 @@ void *load_elf_binary(char* buf, int fd)
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
     totalMemoryMapped += mapSize;
-    fprintf(stderr, "Mapping aligned virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
+    //fprintf(stderr, "Mapping aligned virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
+    fprintf(stderr, "%li, %li, %li\n", alignedPgAddr, offsetInFile, mapSize);
 
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
 
@@ -159,7 +160,8 @@ void *load_elf_binary(char* buf, int fd)
       ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
               flags, -1, 0)), "mmap");
       totalMemoryMapped += mapSize;
-      fprintf(stderr, "[BSS]Mapping aligned virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
+      fprintf(stderr, "%li, bss, %li\n", alignedPgAddr, mapSize);
+      //fprintf(stderr, "[BSS]Mapping aligned virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
     }
 
   }

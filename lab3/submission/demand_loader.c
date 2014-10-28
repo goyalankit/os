@@ -145,16 +145,22 @@ assign_mem:
       flags |= MAP_FIXED;
 
     // for bss segment, we still need to map anonymous region
+    int isBss = 0;
     if (v_addr > (unsigned long)(p_vaddr + phHeader[i].p_filesz)) {
       flags |= MAP_ANONYMOUS;
-      fprintf(stderr, "[BSS]");
+      isBss = 1;
+      //fprintf(stderr, "[BSS]");
     }
 
     char *m_map;
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
     totalMemoryMapped += mapSize;
-    fprintf(stderr, "Mapping aligned  virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
+//    fprintf(stderr, "Mapping aligned  virtual address at %li and TMP: %li\n", alignedPgAddr, totalMemoryMapped);
+    if (isBss == 0)
+      fprintf(stderr, "%li, %li, %li\n", alignedPgAddr, offsetInFile, mapSize);
+    else
+      fprintf(stderr, "%li, bss, %li\n", alignedPgAddr, mapSize);
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
     // we shift the base address using static link.
     if (first_address == 1 && base_address_set == 0) {

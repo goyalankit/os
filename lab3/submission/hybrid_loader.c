@@ -112,7 +112,8 @@ void *map_bss_page(unsigned long v_addr, bool predicted) {
       ASSERT_I(mmap((caddr_t)(v_addr & ~(pg_size-1)), memSize,
             getProt(phHeader[i].p_flags), flags, fd, offset), "mmap");
       totalMemMapped += memSize;
-      fprintf(stderr, "[BSS] Mapping aligned virtual address at %li and TMP: %li\n", (v_addr & ~(pg_size - 1)), totalMemMapped);
+      fprintf(stderr, "%li, bss, %li\n", (unsigned long)(v_addr & ~(pg_size-1)), memSize);
+      //fprintf(stderr, "[BSS] Mapping aligned virtual address at %li and TMP: %li\n", (v_addr & ~(pg_size - 1)), totalMemMapped);
       break;
     }
   }
@@ -183,7 +184,8 @@ void *load_elf_binary(char* buf, int fd)
     ASSERT_I( (m_map = mmap((caddr_t)alignedPgAddr, mapSize, prot,
             flags, fd, offsetInFile)), "mmap");
     totalMemMapped += mapSize;
-    fprintf(stderr, "Mapping aligned virtual address at %li and TM: %li\n", alignedPgAddr, totalMemMapped);
+    //fprintf(stderr, "Mapping aligned virtual address at %li and TM: %li\n", alignedPgAddr, totalMemMapped);
+    fprintf(stderr, "%li, %li, %li\n", alignedPgAddr, offsetInFile, mapSize);
 
     CMP_AND_FAIL(m_map, (char *)alignedPgAddr, "Couldn't assign asked virtual address");
 
