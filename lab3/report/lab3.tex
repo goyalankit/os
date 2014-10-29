@@ -64,8 +64,10 @@ In this all the pages were mapped while loading the test program including \text
 In this loader, at startup only the first page is mapped. A \texttt{segfault handler} is registered and when the program tries to access an unmapped page, it segfaults and the \texttt{segfault handler} maps the corresponding address from file. Performance is discussed later\\
 
 \subsection{Hybrid Loader}
-In this loader, at startup all text and initialized data is mapped. The \texttt{bss} memory is mapped on demand. 
-\textbf{If a program tries to access an invalid memory address}, the \texttt{segmentation fault} is propagated and is thrown as a user would expect.
+In this loader, at startup all text and initialized data is mapped. The \texttt{bss} memory is mapped on demand. \\
+
+\textbf{If a program tries to access an invalid memory address}, the \texttt{segmentation fault} is propagated and is thrown as a user would expect. \\
+
 Hybrid loader also uses the following prediction algorithm, where on every successful prediction a counter is increased and it allows us to map pages in advance.
 
 
@@ -210,6 +212,29 @@ main() {
 \caption{prog4}
 \end{listing}
 
+\section {Actual Numbers in the Graph}
+
+\subsection{Execution Time (seconds)}
+\begin{tabular}{llll}
+
+ & Prog1 & Prog2 & Prog3 \\
+All At Once & 0.002344 & 0.009721 & 0.002592 \\
+On Demand & 0.024904 & 0.012285 & 0.006405 \\
+Hybrid & 0.011381 & 0.011351 & 0.005276 \\
+\end{tabular}
+
+\subsection{Memory Usage (KB)}
+
+\begin{tabular}{llll}
+
+ & Prog1 & Prog2 & Prog3 \\
+All At Once & 12506 & 12509 & 4693 \\
+On Demand & 4176 & 652 & 4172 \\
+Hybrid & 4704 & 1192 & 4696 \\
+\end{tabular}
+
+\vfill
+
 \noindent \textbf{Time Spent on the lab \ensuremath{\approx} 30 hours} 
 
 \section{References}
@@ -222,28 +247,5 @@ main() {
   \item http://stackoverflow.com/questions/8116648/why-is-the-elf-entry-point-0x8048000-not-changeable
   \item http://lxr.free-electrons.com/source/fs/exec.c\#L1425
 \end{enumerate}
-
-\section {Actual Numbers in the Graph}
-
-\subsection{Execution Time}
-\begin{tabular}{llll}
-
- & Prog1 & Prog2 & Prog3 \\
-All At Once & 0.002344 & 0.009721 & 0.002592 \\
-On Demand & 0.024904 & 0.012285 & 0.006405 \\
-Hybrid & 0.011381 & 0.011351 & 0.005276 \\
-\end{tabular}
-
-\subsection{Memory Usage}
-
-\begin{tabular}{llll}
-
- & Prog1 & Prog2 & Prog3 \\
-All At Once & 12506 & 12509 & 4693 \\
-On Demand & 4176 & 652 & 4172 \\
-Hybrid & 4704 & 1192 & 4696 \\
-
-\end{tabular}
-
 
 \end{document}
