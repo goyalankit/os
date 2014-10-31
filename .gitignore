@@ -121,3 +121,5 @@ sympy-plots-for-*.tex/
 *.tdo
 # xindy
 *.xdy
+
+*.d
