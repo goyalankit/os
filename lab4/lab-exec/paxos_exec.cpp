@@ -6,8 +6,6 @@
 #include "log.h"
 #include "paxlog.h"
 
-std::unordered_map<viewstamp_t, int> msgAckd;
-
 void paxserver::execute_arg(const struct execute_arg& ex_arg) {
   if (primary()) {
     if (paxlog.find_rid(ex_arg.nid, ex_arg.rid) &&
@@ -18,8 +16,8 @@ void paxserver::execute_arg(const struct execute_arg& ex_arg) {
       // asign the viewstamp
       viewstamp_t vs;
       vs.vid = vc_state.view.vid;
-      ts = ts + 1;
       vs.ts = ts;
+      ts = ts + 1;
 
       // log the request
       paxlog.log(ex_arg.nid, ex_arg.rid, vs, ex_arg.request,
@@ -55,31 +53,86 @@ void paxserver::replicate_arg(const struct replicate_arg& repl_arg) {
     // TODO(goyalankit) Send ack only when all the vs less than
     // the received has been logged.
     // send ack to the primary
+
+    viewstamp_t committed = repl_arg.committed;
+    viewstamp_t latest_exec = paxlog.latest_exec();
+
+    // execute all the remaining ts
+    // Replica Executing here
+    for (auto it = paxlog.begin(), ie = paxlog.end(); it != ie; ++it) {
+      if (paxlog.next_to_exec(it) && (latest_exec <= committed
+            || latest_exec <= paxlog.latest_accept())) {
+        std::cout << "Secondary Executing: " << (*it)->vs << std::endl;
+        // we don't need to return this from replicas
+        std::string result = paxop_on_paxobj(*it);
+        paxlog.execute(*it);
+        // since messages can be out of order
+        // we want to keep this value updated.
+        if (paxlog.latest_accept() < committed)
+          paxlog.set_latest_accept(committed);
+      }
+    }
+
     auto repl_res = std::make_unique<struct replicate_res>(repl_arg.vs);
     net->send(this, vc_state.view.primary, std::move(repl_res));
   }
-  //MASSERT(0, "replicate_arg not implemented\n");
 }
 
 void paxserver::replicate_res(const struct replicate_res& repl_res) {
 
-  viewstamp_t vs = repl_res.vs;
-  // increment the ack received
-  if (msgAckd[vs] == 0) {
-    (msgAckd[vs]) = 2; // 2 includes increment for self also
-  } else {
-    msgAckd[repl_res.vs] += 1;
+  // increment number of responses received
+  paxlog.incr_resp(repl_res.vs);
+
+  bool execute = true;
+  // check if majority of acks received
+  for (auto it = paxlog.begin(), ie = paxlog.end(); it != ie; ++it) {
+#if 0
+      std::cout << "------------------------------" << std::endl;
+      std::cout << (*it)->vs << " || " << paxlog.latest_exec() << std::endl;
+      std::cout << "------------------------------" << std::endl;
+#endif
+      if (paxlog.next_to_exec(it) && ((*it)->resp_cnt) > 2) {
+        std::cout << "Primary Executing" << std::endl;
+        std::string result = paxop_on_paxobj(*it);
+        paxlog.set_latest_accept((*it)->vs);
+        vc_state.latest_seen = (*it)->vs;
+        paxlog.execute(*it);
+
+        auto ex_success = std::make_unique<struct execute_success>(result, (*it)->rid);
+        std::cout << "Sending client result: " << result  << std::endl;
+        net->send(this, (*it)->src, std::move(ex_success));
+      }
+      execute &= (*it)->executed;
   }
 
-  // check if majority of acks received
-  int majority = get_serv_cnt(vc_state.view) / 2 + 1;
-  if (msgAckd[repl_res.vs] >= majority) {
-    LOG(l::DEBUG, "Log: " << "Majority of Acks received\n");
-    // execute!
-
+  if (execute){
+    // send the replicate request to all other replicas
+      std::set<node_id_t> servers = get_other_servers(vc_state.view);
+      for (node_id_t node_id : servers) {
+        std::cout << "Sending accept arg message" << std::endl;
+        auto acc_arg = std::make_unique<struct accept_arg>(vc_state.latest_seen);
+        net->send(this, node_id, std::move(acc_arg));
+      }
   }
 }
-
 void paxserver::accept_arg(const struct accept_arg& acc_arg) {
-  MASSERT(0, "accept_arg not implemented\n");
+  std::cout << "[Replicate] " << nid << "- Execute pending requests here." << net->any_pending() << std::endl;
+  viewstamp_t committed = acc_arg.committed;
+  viewstamp_t latest_exec = paxlog.latest_exec();
+
+  // execute all the remaining ts
+  // Replica Executing here
+  for (auto it = paxlog.begin(), ie = paxlog.end(); it != ie; ++it) {
+    if (paxlog.next_to_exec(it) && (latest_exec <= committed
+          || latest_exec <= paxlog.latest_accept())) {
+      std::cout << "Secondary Executing: " << (*it)->vs << std::endl;
+      // we don't need to return this from replicas
+      std::string result = paxop_on_paxobj(*it);
+      paxlog.execute(*it);
+      // since messages can be out of order
+      // we want to keep this value updated.
+      if (paxlog.latest_accept() < committed)
+        paxlog.set_latest_accept(committed);
+    }
+  }
 }
