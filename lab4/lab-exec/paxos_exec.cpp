@@ -76,7 +76,17 @@ void paxserver::replicate_arg(const struct replicate_arg& repl_arg) {
     auto repl_res = std::make_unique<struct replicate_res>(repl_arg.vs);
     net->send(this, vc_state.view.primary, std::move(repl_res));
   }
+
+  do_heartbeat();
 }
+
+
+bool myTrimf(const std::unique_ptr<Paxlog::tup>& mytup) {
+  const Paxlog::tup *tup = mytup.get();
+  return tup->executed;
+}
+
+
 
 void paxserver::replicate_res(const struct replicate_res& repl_res) {
 
@@ -104,6 +114,8 @@ void paxserver::replicate_res(const struct replicate_res& repl_res) {
       }
       execute &= (*it)->executed;
   }
+  paxlog.trim_front(myTrimf);
+  do_heartbeat();
 
   if (execute){
     // send the replicate request to all other replicas
@@ -113,6 +125,7 @@ void paxserver::replicate_res(const struct replicate_res& repl_res) {
         auto acc_arg = std::make_unique<struct accept_arg>(vc_state.latest_seen);
         net->send(this, node_id, std::move(acc_arg));
       }
+      do_heartbeat();
   }
 }
 void paxserver::accept_arg(const struct accept_arg& acc_arg) {
@@ -135,4 +148,6 @@ void paxserver::accept_arg(const struct accept_arg& acc_arg) {
         paxlog.set_latest_accept(committed);
     }
   }
+  paxlog.trim_front(myTrimf);
+  do_heartbeat();
 }
