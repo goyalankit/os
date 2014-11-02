@@ -28,14 +28,14 @@ void paxserver::execute_arg(const struct execute_arg& ex_arg) {
       for (node_id_t node_id : servers) {
         auto new_repl_arg = std::make_unique<struct replicate_arg>(
             vs, ex_arg, vc_state.latest_seen);
-        net->send(this, node_id, std::move(new_repl_arg));
+        send_msg(node_id, std::move(new_repl_arg));
       }
     }
   } else {
     // send the fail message so that client can reset the primary
     auto ex_fail = std::make_unique<struct execute_fail>(vc_state.view.vid,
         vc_state.view.primary, ex_arg.rid);
-    net->send(this, ex_arg.nid, std::move(ex_fail));
+    send_msg(ex_arg.nid, std::move(ex_fail));
   }
 }
 
@@ -74,10 +74,8 @@ void paxserver::replicate_arg(const struct replicate_arg& repl_arg) {
     }
 
     auto repl_res = std::make_unique<struct replicate_res>(repl_arg.vs);
-    net->send(this, vc_state.view.primary, std::move(repl_res));
+    send_msg(vc_state.view.primary, std::move(repl_res));
   }
-
-  do_heartbeat();
 }
 
 
@@ -85,8 +83,6 @@ bool myTrimf(const std::unique_ptr<Paxlog::tup>& mytup) {
   const Paxlog::tup *tup = mytup.get();
   return tup->executed;
 }
-
-
 
 void paxserver::replicate_res(const struct replicate_res& repl_res) {
 
@@ -110,12 +106,11 @@ void paxserver::replicate_res(const struct replicate_res& repl_res) {
 
         auto ex_success = std::make_unique<struct execute_success>(result, (*it)->rid);
         std::cout << "Sending client result: " << result  << std::endl;
-        net->send(this, (*it)->src, std::move(ex_success));
+        send_msg((*it)->src, std::move(ex_success));
       }
       execute &= (*it)->executed;
   }
   paxlog.trim_front(myTrimf);
-  do_heartbeat();
 
   if (execute){
     // send the replicate request to all other replicas
@@ -123,9 +118,8 @@ void paxserver::replicate_res(const struct replicate_res& repl_res) {
       for (node_id_t node_id : servers) {
         std::cout << "Sending accept arg message" << std::endl;
         auto acc_arg = std::make_unique<struct accept_arg>(vc_state.latest_seen);
-        net->send(this, node_id, std::move(acc_arg));
+        send_msg(node_id, std::move(acc_arg));
       }
-      do_heartbeat();
   }
 }
 void paxserver::accept_arg(const struct accept_arg& acc_arg) {
@@ -148,6 +142,6 @@ void paxserver::accept_arg(const struct accept_arg& acc_arg) {
         paxlog.set_latest_accept(committed);
     }
   }
+  send_msg(vc_state.view.primary, std::make_unique<nop_msg>());
   paxlog.trim_front(myTrimf);
-  do_heartbeat();
 }
