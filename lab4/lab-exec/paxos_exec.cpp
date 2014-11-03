@@ -87,6 +87,7 @@ void paxserver::replicate_res(const struct replicate_res& repl_res) {
   paxlog.incr_resp(repl_res.vs);
 
   bool execute = true;
+  unsigned majority = get_serv_cnt(vc_state.view) / 2 + 1;
   // check if majority of acks received
   for (auto it = paxlog.begin(), ie = paxlog.end(); it != ie; ++it) {
 #if 0
@@ -94,7 +95,7 @@ void paxserver::replicate_res(const struct replicate_res& repl_res) {
       std::cout << (*it)->vs << " || " << paxlog.latest_exec() << std::endl;
       std::cout << "------------------------------" << std::endl;
 #endif
-      if (paxlog.next_to_exec(it) && ((*it)->resp_cnt) > 2) {
+      if (paxlog.next_to_exec(it) && ((*it)->resp_cnt) > majority) {
         std::string result = paxop_on_paxobj(*it);
         paxlog.set_latest_accept((*it)->vs);
         vc_state.latest_seen = (*it)->vs;
