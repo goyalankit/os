@@ -6,6 +6,12 @@
 #include "log.h"
 #include "paxlog.h"
 
+
+bool myTrimf(const std::unique_ptr<Paxlog::tup>& mytup) {
+  const Paxlog::tup *tup = mytup.get();
+  return tup->executed;
+}
+
 void paxserver::execute_arg(const struct execute_arg& ex_arg) {
   if (primary()) {
     if (paxlog.find_rid(ex_arg.nid, ex_arg.rid) &&
@@ -46,14 +52,6 @@ void paxserver::replicate_arg(const struct replicate_arg& repl_arg) {
     net->drop(this, ex_arg, "Duplicate Replicate Message");
   } else {
 
-    // log the request
-    paxlog.log(ex_arg.nid, ex_arg.rid, repl_arg.vs, ex_arg.request,
-        get_serv_cnt(vc_state.view), net->now());
-
-    // TODO(goyalankit) Send ack only when all the vs less than
-    // the received has been logged.
-    // send ack to the primary
-
     viewstamp_t committed = repl_arg.committed;
     viewstamp_t latest_exec = paxlog.latest_exec();
 
@@ -62,7 +60,6 @@ void paxserver::replicate_arg(const struct replicate_arg& repl_arg) {
     for (auto it = paxlog.begin(), ie = paxlog.end(); it != ie; ++it) {
       if (paxlog.next_to_exec(it) && (latest_exec <= committed
             || latest_exec <= paxlog.latest_accept())) {
-        std::cout << "Secondary Executing: " << (*it)->vs << std::endl;
         // we don't need to return this from replicas
         std::string result = paxop_on_paxobj(*it);
         paxlog.execute(*it);
@@ -73,16 +70,16 @@ void paxserver::replicate_arg(const struct replicate_arg& repl_arg) {
       }
     }
 
+    paxlog.trim_front(myTrimf);
+    // log the request
+    paxlog.log(ex_arg.nid, ex_arg.rid, repl_arg.vs, ex_arg.request,
+        get_serv_cnt(vc_state.view), net->now());
     auto repl_res = std::make_unique<struct replicate_res>(repl_arg.vs);
     send_msg(vc_state.view.primary, std::move(repl_res));
   }
 }
 
 
-bool myTrimf(const std::unique_ptr<Paxlog::tup>& mytup) {
-  const Paxlog::tup *tup = mytup.get();
-  return tup->executed;
-}
 
 void paxserver::replicate_res(const struct replicate_res& repl_res) {
 
@@ -98,14 +95,12 @@ void paxserver::replicate_res(const struct replicate_res& repl_res) {
       std::cout << "------------------------------" << std::endl;
 #endif
       if (paxlog.next_to_exec(it) && ((*it)->resp_cnt) > 2) {
-        std::cout << "Primary Executing" << std::endl;
         std::string result = paxop_on_paxobj(*it);
         paxlog.set_latest_accept((*it)->vs);
         vc_state.latest_seen = (*it)->vs;
         paxlog.execute(*it);
 
         auto ex_success = std::make_unique<struct execute_success>(result, (*it)->rid);
-        std::cout << "Sending client result: " << result  << std::endl;
         send_msg((*it)->src, std::move(ex_success));
       }
       execute &= (*it)->executed;
@@ -116,14 +111,12 @@ void paxserver::replicate_res(const struct replicate_res& repl_res) {
     // send the replicate request to all other replicas
       std::set<node_id_t> servers = get_other_servers(vc_state.view);
       for (node_id_t node_id : servers) {
-        std::cout << "Sending accept arg message" << std::endl;
         auto acc_arg = std::make_unique<struct accept_arg>(vc_state.latest_seen);
         send_msg(node_id, std::move(acc_arg));
       }
   }
 }
 void paxserver::accept_arg(const struct accept_arg& acc_arg) {
-  std::cout << "[Replicate] " << nid << "- Execute pending requests here." << net->any_pending() << std::endl;
   viewstamp_t committed = acc_arg.committed;
   viewstamp_t latest_exec = paxlog.latest_exec();
 
@@ -132,7 +125,7 @@ void paxserver::accept_arg(const struct accept_arg& acc_arg) {
   for (auto it = paxlog.begin(), ie = paxlog.end(); it != ie; ++it) {
     if (paxlog.next_to_exec(it) && (latest_exec <= committed
           || latest_exec <= paxlog.latest_accept())) {
-      std::cout << "Secondary Executing: " << (*it)->vs << std::endl;
+
       // we don't need to return this from replicas
       std::string result = paxop_on_paxobj(*it);
       paxlog.execute(*it);
