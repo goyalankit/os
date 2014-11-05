@@ -74,6 +74,16 @@ void paxserver::execute_arg(const struct execute_arg& ex_arg) {
  * */
 void paxserver::replicate_arg(const struct replicate_arg& repl_arg) {
   auto ex_arg = repl_arg.arg;
+
+  // check if we have executed and truncated the log for this request
+    for (auto it = exec_rid_cache.begin(), ie = exec_rid_cache.end();
+        it != ie; ++it ){
+      if (((*it).first == ex_arg.nid) && ((*it).second == ex_arg.rid)) {
+        net->drop(this, ex_arg, "Duplicate Execute Message");
+        return;
+      }
+    }
+
   // check for duplicate messages
   if (paxlog.find_rid(ex_arg.nid, ex_arg.rid) &&
       vc_state.view.vid == ex_arg.vid) {
