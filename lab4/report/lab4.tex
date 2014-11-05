@@ -1,0 +1,78 @@
+\documentclass[10pt] {article}
+\usepackage{fourier}
+\author{Ankit Goyal \\ankit@cs.utexas.edu \\ CS380L}
+\title{Lab 4: Consensus via Paxos}
+\date{\today}	
+\usepackage{full page}
+
+\usepackage{hyperref, url}
+\usepackage{listings}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{amsmath}
+%\usepackage{amsmath, enumerate, url, ulem, algorithmic, polynom, subfig}
+
+\setlength\parindent{0pt}
+
+\begin{document}
+\maketitle
+%----------------------------------------------------------------------------------------
+%  Specs
+%----------------------------------------------------------------------------------------
+
+\section{Setup}
+\subsection{Hardware}
+\textbf{Host Processor}: 64 bit 4 core Intel(R) Xeon(R) CPU E3-1270 V2 @ 3.50GHz\\
+\textbf{Host Memory}: 16GB \\
+\textbf{HyperThreading}: Yes \\
+\textbf{Logical CPUs after Hyperthreading}: 8 \\
+\textbf{CPU frequency scaling}: Disabled in BIOS (turned off Intel SpeedStep and C-states)
+
+\subsection{Software}
+\textbf{Host Operating System}: Ubuntu with 3.13.0-34-generic 64 bit kernel.\\
+
+
+\section {Methods Implemented}
+\subsection {\texttt{void paxserver::execute\_arg(const struct execute\_arg\& ex\_arg)}}
+This is sent by clients to primary server (to the best of their knowledge). In normal operation, logs the request, update the viewstamp and latest accept in paxos log. Following are some non-trivial cases:
+\subsubsection {Client sends the message to non-primary server}
+If the server at the receiving end is not the current primary server in the current view, it drops (\texttt{net->drop}) the \texttt{execute\_arg} message and sends back the \texttt{execute\_fail} message.
+
+\subsubsection {Check if the request (\texttt{rid}) has already been received from the given client (\texttt{nid}) but not executed}
+The client may time out and send the request again to the primary server. But primary server should not log the request twice, so it checks in it's log using \texttt{Paxlof::find\_rid} method. If it's present it simply drops the message.
+\subsubsection {Check if the request has already been executed and the log truncated}
+It may happened that the primary has already executed the request and trimmed the log. Since the log has been trimmed the case above will not be able to see that primary has already processed this request. So we search for the given request id(\texttt{rid}) and client id(\texttt{nid}) in \texttt{exec\_rid\_cache} maintained by paxos server to detect duplicates in different scenarios.
+
+\subsection {\texttt{void paxserver::replicate\_arg(const struct replicate\_arg\& repl\_arg)}}
+This is sent to replicas by primary to replicate the log. This method checks for duplicates from primary and performs similar checks as performed in the previous method (\texttt{paxserver::execute\_arg}) \\
+
+This method also executes the log enteries based on the \texttt{latest\_seen} field received in the message. It updates \texttt{latest\_accept} in $paxlog$ and \texttt{latest\_seen} in \texttt{vc\_state} for the current replica. \\
+
+At the end it trims the log and sends \texttt{replicate\_res} to the primary server, acknowledging the receipt of \texttt{replicate\_arg}. \\
+
+\subsection {\texttt{void paxserver::replicate\_res(const struct replicate\_res\& repl\_res) }}
+Primary server records the receipt by incrementing the counter in paxlog in the corresponding tuple (\texttt{tup}). Primary now executes the log entries in order if the majority of the servers have acknowledged the logging of the request according to the viewstamp using \texttt{next\_to\_exec} method. Client here updates the \texttt{latest\_seen} field in \texttt{vc\_state} so that replicas can be informed of it in the next message. \\
+
+Primary aggressively trims the log here. Trim function simply checks the entry has been executed and then\texttt{trim\_front} is called to trim log from front. \\
+
+Primary checks if the paxlog is empty, and if it is empty, primary sends an \texttt{accept\_arg} message to all replicas with the updated \texttt{latest\_seen} value.
+
+\subsection {\texttt{void paxserver::accept\_arg(const struct accept\_arg\& acc\_arg)}}
+Replicas execute the remaining entries in this method, update their \texttt{latest\_accept} and \texttt{latest\_seen}. We also trim the log here.
+
+
+\noindent \textbf{Time Spent on the lab \ensuremath{\approx} 10 hours} 
+
+\section{References}
+\begin{enumerate}
+  \item http://eli.thegreenplace.net/2012/08/13/how-statically-linked-programs-run-on-linux/
+  \item http://www.skyfree.org/linux/references/ELF\_Format.pdf
+  \item http://linux.die.net/man/5/elf
+  \item http://articles.manugarg.com/aboutelfauxiliaryvectors.html
+  \item  http://pubs.opengroup.org/onlinepubs/009695399/functions/sigaction.html
+  \item http://stackoverflow.com/questions/8116648/why-is-the-elf-entry-point-0x8048000-not-changeable
+  \item http://lxr.free-electrons.com/source/fs/exec.c\#L1425
+\end{enumerate}
+
+\end{document}
