@@ -56,23 +56,20 @@ Primary server records the receipt by incrementing the counter in paxlog in the 
 
 Primary aggressively trims the log here. Trim function simply checks the entry has been executed and then\texttt{trim\_front} is called to trim log from front. \\
 
-Primary checks if the paxlog is empty, and if it is empty, primary sends an \texttt{accept\_arg} message to all replicas with the updated \texttt{latest\_seen} value.
+\textbf{Primary checks if the paxlog is empty, and if it is empty, primary sends an \texttt{accept\_arg} message to all replicas with the updated \texttt{latest\_seen} value.}
 
 \subsection {\texttt{void paxserver::accept\_arg(const struct accept\_arg\& acc\_arg)}}
 Replicas execute the remaining entries in this method, update their \texttt{latest\_accept} and \texttt{latest\_seen}. We also trim the log here.
+
+\section { Interesting bug}
+Timestamp(\texttt{ts})  starts from 1 and I was updating the timestamp first and then assigning it to the viewstamp of new message, which basically started my \texttt{ts} from 2 and no record was therefore satisfying the \texttt{next\_to\_execute} condition. It lead to no entry being executed, client timeouts and eventually initiated view change. \\
 
 
 \noindent \textbf{Time Spent on the lab \ensuremath{\approx} 10 hours} 
 
 \section{References}
 \begin{enumerate}
-  \item http://eli.thegreenplace.net/2012/08/13/how-statically-linked-programs-run-on-linux/
-  \item http://www.skyfree.org/linux/references/ELF\_Format.pdf
-  \item http://linux.die.net/man/5/elf
-  \item http://articles.manugarg.com/aboutelfauxiliaryvectors.html
-  \item  http://pubs.opengroup.org/onlinepubs/009695399/functions/sigaction.html
-  \item http://stackoverflow.com/questions/8116648/why-is-the-elf-entry-point-0x8048000-not-changeable
-  \item http://lxr.free-electrons.com/source/fs/exec.c\#L1425
+  \item Paxos Made Practical - David Mazieres
 \end{enumerate}
 
 \end{document}
