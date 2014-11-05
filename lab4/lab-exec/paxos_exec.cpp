@@ -169,6 +169,8 @@ void paxserver::accept_arg(const struct accept_arg& acc_arg) {
       // we don't need to return this from replicas
       std::string result = paxop_on_paxobj(*it);
       paxlog.execute(*it);
+
+      vc_state.latest_seen = (*it)->vs;
       // since messages can be out of order
       // we want to keep this value updated.
       if (paxlog.latest_accept() < committed)
